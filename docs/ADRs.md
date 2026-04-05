@@ -111,6 +111,7 @@ All substantive work should happen on branches and merge through pull requests.
 - Do not push directly to `main`.
 - Create a branch for each slice or focused change.
 - Open a pull request that explains scope, verification, and any accepted follow-up work before merging.
+- When branch work is pushed for review, create the pull request in the same flow unless there is an explicit reason not to.
 
 ### Consequences
 

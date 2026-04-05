@@ -42,6 +42,7 @@ The goal is to learn a modern web stack by building something real enough to for
 - Then use `/prd-to-tasks` to turn that PRD into `docs/slices/<slice-name>/TASKS.md`.
 - Implement the slice on a branch, not on `main`.
 - Open a pull request for the branch so scope, verification, and follow-up decisions are captured before merge.
+- When branch work is pushed for review, create the pull request in the same flow unless there is an explicit reason not to.
 - Before merging, run the `/improve-codebase-architecture` skill and capture any accepted refactors in docs.
 - Let the skills carry the detailed interview process; the docs store the resulting decisions and artifacts.
 
