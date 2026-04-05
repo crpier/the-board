@@ -20,6 +20,9 @@ Define how commits and pull requests should read in this repo.
 
 - Do not push directly to `main`.
 - Create a branch for each slice or focused change.
+- Prefer creating the branch before starting the batch of work rather than waiting for the first commit.
+- Name branches for the slice or focused change, not for a single task, unless the branch truly is task-scoped.
+- Prefer names like `slice/public-feed` over names like `slice/public-feed-task-1` when multiple related tasks may land on the same branch.
 - Open a draft pull request for branch work, even when the repo is effectively solo-maintained.
 - If branch work is pushed for review, create the draft pull request in the same flow unless explicitly told not to.
 - Use the pull request to capture scope, verification, and follow-up decisions before merging.
