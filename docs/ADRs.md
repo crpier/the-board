@@ -52,7 +52,7 @@ The default workflow for a new feature is:
 - `/write-a-prd` to produce `docs/slices/<slice-name>/PRD.md`
 - `/prd-to-tasks` to produce `docs/slices/<slice-name>/TASKS.md`
 - implement the slice tasks on a branch
-- open a pull request that captures scope, verification, and follow-up work
+- open a draft pull request that captures scope, verification, and follow-up work
 - `/improve-codebase-architecture` before merging and closing the slice
 
 The skills own the detailed process. The docs hold the resulting product and execution artifacts.
@@ -110,8 +110,9 @@ All substantive work should happen on branches and merge through pull requests.
 
 - Do not push directly to `main`.
 - Create a branch for each slice or focused change.
-- Open a pull request that explains scope, verification, and any accepted follow-up work before merging.
-- When branch work is pushed for review, create the pull request in the same flow unless there is an explicit reason not to.
+- Open a draft pull request that explains scope, verification, and any accepted follow-up work before merging.
+- When branch work is pushed for review, create the draft pull request in the same flow unless there is an explicit reason not to.
+- Only mark a pull request as ready for review when explicitly requested.
 
 ### Consequences
 

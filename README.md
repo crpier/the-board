@@ -35,17 +35,6 @@ The goal is to learn a modern web stack by building something real enough to for
 - Treat `mockups/index-mockup.html` as the current visual reference for the public feed.
 - Do work on a branch and merge through a pull request; do not push directly to `main`.
 
-## Feature workflow
-
-- Start a new feature with `/grill-me` to resolve the problem, scope, and key decisions.
-- Then use `/write-a-prd` to turn the resolved interview into `docs/slices/<slice-name>/PRD.md`.
-- Then use `/prd-to-tasks` to turn that PRD into `docs/slices/<slice-name>/TASKS.md`.
-- Implement the slice on a branch, not on `main`.
-- Open a pull request for the branch so scope, verification, and follow-up decisions are captured before merge.
-- When branch work is pushed for review, create the pull request in the same flow unless there is an explicit reason not to.
-- Before merging, run the `/improve-codebase-architecture` skill and capture any accepted refactors in docs.
-- Let the skills carry the detailed interview process; the docs store the resulting decisions and artifacts.
-
 ## Project principles
 
 - Prefer clarity and teachable patterns over cleverness.

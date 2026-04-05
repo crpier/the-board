@@ -20,9 +20,14 @@ Define how commits and pull requests should read in this repo.
 
 - Do not push directly to `main`.
 - Create a branch for each slice or focused change.
-- Open a pull request for branch work, even when the repo is effectively solo-maintained.
-- If branch work is pushed for review, create the pull request in the same flow unless explicitly told not to.
+- Open a draft pull request for branch work, even when the repo is effectively solo-maintained.
+- If branch work is pushed for review, create the draft pull request in the same flow unless explicitly told not to.
 - Use the pull request to capture scope, verification, and follow-up decisions before merging.
+
+## Review state
+
+- Default new pull requests to draft.
+- Only mark a pull request as ready for review when explicitly requested.
 
 ## Pull request shape
 

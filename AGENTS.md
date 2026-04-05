@@ -12,8 +12,9 @@
 - `docs/slices/` holds slice-specific PRDs and tasks.
 - `mockups/index-mockup.html` remains the current design mockup reference.
 - New features should usually follow: `/grill-me` -> `/write-a-prd` -> `/prd-to-tasks`.
-- Do not push directly to `main`; create a branch for the work and open a pull request.
-- When the user asks to push changes, also create the pull request unless they explicitly say not to.
+- Do not push directly to `main`; create a branch for the work and open a draft pull request.
+- When the user asks to push changes, also create the draft pull request unless they explicitly say not to.
+- Only mark a pull request as ready for review when the user explicitly asks for that change.
 - Before closing a slice, run the `/improve-codebase-architecture` skill and capture any accepted refactors in docs.
 - Do not create a separate cursor file just to track the current or next piece of work; keep that state in the relevant slice docs, branch, and pull request context.
 - Keep workflow details in the skills; keep resulting decisions in the docs.
