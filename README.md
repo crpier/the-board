@@ -22,7 +22,7 @@ The goal is to learn a modern web stack by building something real enough to for
 
 - `docs/product-overview.md` - enduring product rules and product-level scope
 - `docs/ADRs.md` - architecture decision records
-- `docs/standards/` - coding, review, commit, and PR standards
+- `docs/standards/` - coding, commit, and PR standards
 - `docs/slices/` - slice-specific `PRD.md` and `TASKS.md` files
 - `mockups/` - design references and UI explorations
 
@@ -33,14 +33,7 @@ The goal is to learn a modern web stack by building something real enough to for
 - Use `docs/standards/` for repo process and quality expectations.
 - Use the active slice under `docs/slices/` to see current requirements, tasks, and implementation notes.
 - Treat `mockups/index-mockup.html` as the current visual reference for the public feed.
-
-## Feature workflow
-
-- Start a new feature with `/grill-me` to resolve the problem, scope, and key decisions.
-- Then use `/write-a-prd` to turn the resolved interview into `docs/slices/<slice-name>/PRD.md`.
-- Then use `/prd-to-tasks` to turn that PRD into `docs/slices/<slice-name>/TASKS.md`.
-- After implementation, run the `/improve-codebase-architecture` skill before closing the slice.
-- Let the skills carry the detailed interview process; the docs store the resulting decisions and artifacts.
+- Do work on a branch and merge through a pull request; do not push directly to `main`.
 
 ## Project principles
 
