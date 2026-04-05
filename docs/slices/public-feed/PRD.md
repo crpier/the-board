@@ -11,9 +11,9 @@ Without a dedicated public feed slice, the project mixes browsing concerns with 
 
 ## Solution
 
-Build a public reverse-chronological feed at `/` backed by real data and linked to the canonical meme detail route.
+Build a public reverse-chronological feed at `/` backed by real data.
 
-The slice should render an intentional empty state, support progressive loading, show rich card metadata, stay visually close to `mockups/index-mockup.html`, and mirror the established voting behavior on feed cards.
+The slice should render an intentional empty state, support progressive loading, show rich card metadata, stay visually close to `mockups/index-mockup.html`, and mirror the established voting behavior on feed cards. Feed-to-detail navigation should integrate with the canonical meme detail route once that route exists, but the feed slice does not depend on the detail slice to begin delivering browse-first value.
 
 ## User Stories
 
@@ -35,9 +35,9 @@ The slice should render an intentional empty state, support progressive loading,
 - The feed supports infinite scroll.
 - The feed renders an intentional empty state when no public ready memes exist.
 - Feed cards show primary media preview, title when present, tags, aggregate upvote count, aggregate downvote count, author, and post time.
-- Each feed card links to the canonical detail route.
+- Feed-to-detail navigation should point at the canonical detail route once that route exists, but that integration is not a prerequisite for starting the feed slice.
 - The slice stays visually close to `mockups/index-mockup.html`.
-- Feed voting mirrors the established auth and one-active-vote behavior from the meme detail slice.
+- Feed voting mirrors the established auth and one-active-vote behavior from the meme detail slice once that behavior exists.
 
 ## Testing Decisions
 
@@ -50,10 +50,11 @@ The slice should render an intentional empty state, support progressive loading,
 
 - No canonical detail route behavior in this slice.
 - No hidden-versus-processing route handling for the detail page.
-- No first-time definition of voting rules; this slice reuses the established detail voting behavior.
+- No first-time definition of voting rules; this slice reuses the established detail voting behavior once that work exists.
 - No comments, reposts, bookmarks, or social graph features.
 - No separate admin page.
 
 ## Further Notes
 
-- This slice assumes the canonical detail route already exists and remains the destination when a user opens a meme from the feed.
+- This slice can start independently as a browse-first surface.
+- Once the canonical detail route exists, opening a meme from the feed should use that route as the destination.
