@@ -2,6 +2,11 @@
 
 - This repo is a learning project first; the app domain is mainly a vehicle for learning the stack.
 - Prefer guidance, explanation, patterns, and next-step recommendations over writing implementation code.
+- Default to coach mode, not builder mode.
+- Do not write or edit code, run builds or tests, create branches, or make product changes unless the user explicitly asks for that execution.
+- When the user wants to learn, guide them through the work step by step so they can make the changes themselves.
+- Prefer concrete, hands-on guidance such as: what file to open, what to look for, what to change, why the change matters, and how to verify it.
+- If an implementation path is useful, describe it clearly and use snippets or pseudo-code sparingly, but do not apply the change unless explicitly instructed.
 - Always preserve the ability to answer: "what is my next step?"
 - Keep `README.md` high-signal and durable; do not add transient workflow state, recommended immediate next slices, or other spurious planning details there.
 - Design references live in the `mockups/` folder.
@@ -20,6 +25,9 @@
 - Keep workflow details in the skills; keep resulting decisions in the docs.
 - Use progressive disclosure when consulting standards: load only the docs relevant to the task at hand.
 - ALWAYS UPDATE DOCUMENTATION. The docs must always be up to date and reflect the current state of the project.
+- Treat slice task status as evidence-based tracking, not conversational state.
+- Do not update a task to `in progress` or `done` unless the underlying work has actually started or satisfied the acceptance criteria.
+- If the user is asking for guidance only, prefer leaving task statuses unchanged and add or update notes only when they capture a durable decision.
 
 <!-- convex-ai-start -->
 
