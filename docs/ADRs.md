@@ -1,7 +1,7 @@
 # ADRs
 
 Status: active
-Last updated: 2026-04-04
+Last updated: 2026-04-05
 
 ## 0001 - Documentation Structure
 
@@ -51,8 +51,9 @@ The default workflow for a new feature is:
 - `/grill-me` to resolve the feature through user interview
 - `/write-a-prd` to produce `docs/slices/<slice-name>/PRD.md`
 - `/prd-to-tasks` to produce `docs/slices/<slice-name>/TASKS.md`
-- implement the slice tasks
-- `/improve-codebase-architecture` before closing the slice
+- implement the slice tasks on a branch
+- open a pull request that captures scope, verification, and follow-up work
+- `/improve-codebase-architecture` before merging and closing the slice
 
 The skills own the detailed process. The docs hold the resulting product and execution artifacts.
 
@@ -61,7 +62,7 @@ The skills own the detailed process. The docs hold the resulting product and exe
 - The repo documents the workflow at a high level without duplicating skill instructions.
 - Slice artifacts should stay compatible with the skills that generate them.
 - Process changes should usually happen in the skills first, with docs updated only where the visible workflow changes.
-- Slice completion includes an explicit post-implementation architecture review step.
+- Slice completion includes an explicit pre-merge architecture review step.
 
 ## 0003 - Standards Documents
 
@@ -91,3 +92,28 @@ The GitHub pull request template should align with these standards.
 - Process expectations have a durable home outside slice docs.
 - `README.md` and `AGENTS.md` can point to the standards without duplicating them.
 - Agents should consult standards progressively instead of loading all process documents for every task.
+
+## 0004 - Branch and Pull Request Workflow
+
+Date: 2026-04-05
+Status: accepted
+
+### Context
+
+The project is small and effectively solo-maintained, but it still benefits from a visible review and integration boundary.
+
+Pushing directly to `main` makes it easier to skip scope checks, verification notes, and documentation of follow-up work. That weakens the repo's learning value and makes it harder to reconstruct why a change was made.
+
+### Decision
+
+All substantive work should happen on branches and merge through pull requests.
+
+- Do not push directly to `main`.
+- Create a branch for each slice or focused change.
+- Open a pull request that explains scope, verification, and any accepted follow-up work before merging.
+
+### Consequences
+
+- `main` stays a cleaner record of reviewed, documented changes.
+- Even solo work preserves a lightweight review checkpoint.
+- Branch and PR expectations need to be reflected in repo process docs and agent instructions.

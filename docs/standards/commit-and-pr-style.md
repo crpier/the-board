@@ -1,7 +1,7 @@
 # Commit and PR Style
 
 Status: draft
-Last updated: 2026-04-04
+Last updated: 2026-04-05
 
 ## Purpose
 
@@ -15,6 +15,13 @@ Define how commits and pull requests should read in this repo.
 - Keep unrelated changes out of the same commit when practical.
 - Respect commit-time automation such as Husky hooks and fix failures before committing.
 - Don't use conventional commits
+
+## Branching and merge flow
+
+- Do not push directly to `main`.
+- Create a branch for each slice or focused change.
+- Open a pull request for branch work, even when the repo is effectively solo-maintained.
+- Use the pull request to capture scope, verification, and follow-up decisions before merging.
 
 ## Pull request shape
 
