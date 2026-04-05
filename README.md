@@ -42,6 +42,11 @@ The goal is to learn a modern web stack by building something real enough to for
 - Keep documentation current as decisions change.
 - Use AI for guidance and workflow support more than bulk implementation.
 
+## Acknowledgements
+
+- The custom skills in this repo are modified versions of work from Matt Pocock's `skills` project: `https://github.com/mattpocock/skills`.
+- Parts of this repo's development process are inspired by Matt Pocock's "My 7 phases of AI development": `https://www.aihero.dev/my-7-phases-of-ai-development`.
+
 ## Development notes
 
 - This project was created with the [Solid CLI](https://github.com/solidjs-community/solid-cli).
