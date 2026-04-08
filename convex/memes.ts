@@ -1,8 +1,14 @@
 import { query } from "./_generated/server";
 
-export const getPublicMeme = query({
+export const listPublicMemes = query({
   args: {},
-  handler: async () => {
-    return [{ _id: 1, title: "First meme", visibility: "public" }];
+  handler: async (ctx) => {
+    return await ctx.db
+      .query("memes")
+      .withIndex("by_visibility_and_status", (q) =>
+        q.eq("visibility", "public").eq("status", "ready"),
+      )
+      .order("desc")
+      .take(20);
   },
 });
