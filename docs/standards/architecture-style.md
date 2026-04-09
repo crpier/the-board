@@ -1,7 +1,7 @@
 # Architecture Style
 
 Status: draft
-Last updated: 2026-04-05
+Last updated: 2026-04-09
 
 ## Purpose
 
@@ -10,6 +10,7 @@ Capture project standards for code structure, module boundaries, and architectur
 ## General rules
 
 - Prefer deeper modules with simpler boundaries when the code earns them.
+- Prefer introducing deeper boundaries through small caller-facing modules before changing low-level integration helpers.
 
 ## Decision recording
 

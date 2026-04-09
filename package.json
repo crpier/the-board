@@ -6,7 +6,7 @@
     "build": "vinxi build",
     "start": "vinxi start",
     "preview": "vinxi preview",
-    "format": "prettier --write \"**/*.{js,ts,jsx,tsx,css,md,yml,yaml}\"",
+    "format": "prettier --write \"**/*.{js,ts,jsx,tsx,css,md,yml,yaml,json}\"",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "prepare": "husky"

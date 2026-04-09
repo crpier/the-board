@@ -3,7 +3,7 @@ import { Router } from "@solidjs/router";
 import { FileRoutes } from "@solidjs/start/router";
 import { Suspense } from "solid-js";
 import "./app.css";
-import { ConvexProvider } from "~/lib/cvxsolid";
+import { ConvexProvider } from "~/lib/convex-solid";
 import { convex } from "~/lib/convex";
 
 export default function App() {
