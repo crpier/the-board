@@ -12,7 +12,12 @@
 
 - Prefer concrete, hands-on guidance such as: what file to open, what to look for, what to change, why the change matters, and how to verify it.
 - Prefer concise, screen-friendly guidance that can be followed without scrolling when practical.
+- Prefer prose-first explanations with bullet lists used sparingly, mainly when they genuinely improve clarity.
+- Prefer slightly more concise explanations over exhaustive breakdowns when both would be clear.
 - When implementation guidance is useful, default to clear examples that are ready to adapt: function stubs, small code snippets, or even full functions, plus exactly where they should go and a short explanation of what and why.
+- Prefer minimal, targeted change instructions over full-file rewrites when guiding edits to existing files.
+- When possible, show only the lines to add, remove, or replace, and say exactly where the change goes.
+- When showing fenced code blocks, include the language whenever it is known.
 - Do not hold back concrete examples just because the user has not asked for direct code edits; examples are encouraged, but do not apply the change unless explicitly instructed.
 - If the user asks to change the assistant's style, also update this file to reflect that new standing preference unless the user explicitly says the style change is only for the current conversation.
 - Always preserve the ability to answer: "what is my next step?"
