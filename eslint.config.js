@@ -8,8 +8,19 @@ export default ts.config(
   // Use the plugin directly, then access the configs
   solid.configs["flat/typescript"],
   {
+    ignores: [
+      ".output/**",
+      ".vinxi/**",
+      "node_modules/**",
+      "convex/_generated/**",
+    ],
+  },
+  {
     rules: {
-      "@typescript-eslint/no-unused-vars": ["warn"],
+      "@typescript-eslint/no-unused-vars": [
+        "warn",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
+      ],
     },
   },
 );
