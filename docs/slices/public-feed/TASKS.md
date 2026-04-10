@@ -33,7 +33,7 @@ None - can start immediately.
 
 ## Task 2 - Enrich public feed cards and ordering
 
-Status: todo
+Status: done
 
 ### What to build
 
@@ -41,9 +41,9 @@ Expand the working feed into the intended browse-first experience by adding the 
 
 ### Acceptance criteria
 
-- [ ] Feed ordering is reverse chronological.
-- [ ] Feed cards show the required slice metadata: primary media preview, title when present, tags, aggregate upvote count, aggregate downvote count, author, and post time.
-- [ ] The feed remains visually consistent with `mockups/index-mockup.html`.
+- [x] Feed ordering is reverse chronological.
+- [x] Feed cards show the required slice metadata: primary media preview, title when present, tags, aggregate upvote count, aggregate downvote count, author, and post time.
+- [x] The feed remains visually consistent with `mockups/index-mockup.html`.
 
 ### Blocked by
 

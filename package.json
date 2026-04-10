@@ -19,6 +19,7 @@
     "@t3-oss/env-core": "^0.13.11",
     "@tailwindcss/vite": "^4.2.2",
     "convex": "^1.34.1",
+    "date-fns": "^4.1.0",
     "lucide-solid": "^1.8.0",
     "solid-js": "^1.9.12",
     "tailwindcss": "^4.2.2",
