@@ -21,19 +21,23 @@ The goal is to learn a modern web stack by building something real enough to for
 ## Documentation
 
 - `docs/product-overview.md` - enduring product rules and product-level scope
+- `docs/ROADMAP.md` - likely next slices and medium-term direction
 - `docs/ADRs.md` - architecture decision records
 - `docs/standards/` - coding, commit, and PR standards
-- `docs/slices/` - slice-specific `PRD.md` and `TASKS.md` files
+- `PRD.md` and `TASKS.md` - temporary active-slice planning files used only on the working branch
 - `mockups/` - design references and UI explorations
 
 ## Contributing and orientation
 
 - Start with `docs/product-overview.md` to understand the product.
+- Treat `docs/product-overview.md` as the always-current product truth; mergeable changes should match it or update it.
+- Check `docs/ROADMAP.md` for likely next slices and medium-term direction.
 - Check `docs/ADRs.md` for project-wide decisions.
 - Use `docs/standards/` for repo process and quality expectations.
-- Use the active slice under `docs/slices/` to see current requirements, tasks, and implementation notes.
+- Use root-level `PRD.md` and `TASKS.md` only for the active slice on the current branch.
 - Treat `mockups/index-mockup.html` as the current visual reference for the public feed.
 - Do work on a branch and merge through a pull request; do not push directly to `main`.
+- `PRD.md` and `TASKS.md` should not exist in a mergeable pull request.
 
 ## Project principles
 

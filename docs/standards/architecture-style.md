@@ -15,7 +15,8 @@ Capture project standards for code structure, module boundaries, and architectur
 ## Decision recording
 
 - Record durable cross-cutting decisions in `docs/ADRs.md`.
-- Keep slice-specific implementation detail in the relevant `TASKS.md`.
+- Keep active-slice implementation detail in root-level `PRD.md` and `TASKS.md` while the slice is in flight.
+- Promote any durable outcome from `PRD.md` and `TASKS.md` into `docs/product-overview.md`, `docs/ADRs.md`, `docs/ROADMAP.md`, or the standards docs before merge.
 
 ## Slice task tracking
 
@@ -24,3 +25,4 @@ Capture project standards for code structure, module boundaries, and architectur
 - Move a task to `in progress` only when the corresponding execution has begun.
 - Move a task to `done` only when its acceptance criteria are satisfied.
 - Use task notes for durable decisions, discovered blockers, or verification evidence that will still matter later.
+- `PRD.md` and `TASKS.md` are temporary planning files and should not remain in a mergeable pull request.
