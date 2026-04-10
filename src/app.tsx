@@ -11,9 +11,7 @@ export default function App() {
     <Router
       root={(props) => (
         <MetaProvider>
-          <Title>SolidStart - Basic</Title>
-          <a href="/">Index</a>
-          <a href="/about">About</a>
+          <Title>the-board</Title>
           <ConvexProvider client={convex}>
             <Suspense>{props.children}</Suspense>
           </ConvexProvider>

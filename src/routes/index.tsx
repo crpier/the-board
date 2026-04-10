@@ -1,22 +1,23 @@
 import { usePublicFeed } from "~/lib/public-feed";
 import { Title } from "@solidjs/meta";
 import { For, Show } from "solid-js";
+import { MemeCard } from "~/components/MemeCard";
 
 export default function Home() {
   const memes = usePublicFeed();
 
   return (
-    <main>
+    <main class="mx-auto max-w-2xl space-y-5 px-5 py-6">
       <Title>The Board</Title>
-      <h1>Welcome to the Board</h1>
-      <Show when={!memes.isLoading()} fallback={<p>Loading...</p>}>
+      <Show
+        when={!memes.isLoading()}
+        fallback={<p class="text-[#5a5a6e]">Loading...</p>}
+      >
         <Show
           when={(memes.data()?.length ?? 0) > 0}
-          fallback={<p>No memes for you</p>}
+          fallback={<p class="text-[#5a5a6e]">No memes for you</p>}
         >
-          <ul>
-            <For each={memes.data()}>{(meme) => <li>{meme.title}</li>}</For>
-          </ul>
+          <For each={memes.data()}>{(meme) => <MemeCard meme={meme} />}</For>
         </Show>
       </Show>
     </main>

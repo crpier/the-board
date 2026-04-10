@@ -1,7 +1,7 @@
 # Public Feed Tasks
 
 Status: draft
-Last updated: 2026-04-05
+Last updated: 2026-04-09
 
 ## Parent PRD
 
@@ -9,7 +9,7 @@ Last updated: 2026-04-05
 
 ## Task 1 - Ship the first real public feed path
 
-Status: todo
+Status: done
 
 ### What to build
 
@@ -17,9 +17,9 @@ Deliver the first end-to-end public browsing path from real app data to the `/` 
 
 ### Acceptance criteria
 
-- [ ] `/` renders from real app data rather than starter placeholder content.
-- [ ] The feed shows only memes that are both `public` and ready for viewing.
-- [ ] When no public ready memes exist, the route renders an intentional empty state.
+- [x] `/` renders from real app data rather than starter placeholder content.
+- [x] The feed shows only memes that are both `public` and ready for viewing.
+- [x] When no public ready memes exist, the route renders an intentional empty state.
 
 ### Blocked by
 

@@ -14,5 +14,14 @@ export default defineSchema({
       v.literal("deleted"),
     ),
     mediaUrl: v.string(),
+    mediaType: v.union(
+      v.literal("image"),
+      v.literal("gif"),
+      v.literal("video"),
+    ),
+    tags: v.array(v.string()),
+    authorName: v.string(),
+    upvoteCount: v.number(),
+    downvoteCount: v.number(),
   }).index("by_visibility_and_status", ["visibility", "status"]),
 });
