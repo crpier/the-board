@@ -32,10 +32,11 @@
 - Keep `README.md` high-signal and durable; do not add transient workflow state, recommended immediate next slices, or other spurious planning details there.
 - Design references live in the `mockups/` folder.
 - `README.md` remains the entry point.
+- `docs/ROADMAP.md` holds likely next slices and medium-term direction.
 - `docs/product-overview.md` is the current product overview.
 - `docs/ADRs.md` holds architecture decision records.
 - `docs/standards/` holds repo standards for code style, and commit/PR shape.
-- `docs/slices/` holds slice-specific PRDs and tasks.
+- Root-level `PRD.md` and `TASKS.md` are temporary planning files for the active slice only.
 - `mockups/index-mockup.html` remains the current design mockup reference.
 
 ## Workflow
@@ -46,14 +47,17 @@
 - When the user asks to push changes, also create the draft pull request unless they explicitly say not to.
 - Only mark a pull request as ready for review when the user explicitly asks for that change.
 - Before closing a slice, run the `/improve-codebase-architecture` skill and capture any accepted refactors in docs.
-- Do not create a separate cursor file just to track the current or next piece of work; keep that state in the relevant slice docs, branch, and pull request context.
+- Use root-level `PRD.md` and `TASKS.md` only while a slice is active on its branch.
+- `PRD.md` and `TASKS.md` should not exist in a mergeable pull request; either delete them before review or promote any durable decisions into `docs/product-overview.md`, `docs/ADRs.md`, `docs/ROADMAP.md`, or the standards docs.
 - Keep workflow details in the skills; keep resulting decisions in the docs.
 - Use progressive disclosure when consulting standards: load only the docs relevant to the task at hand.
 
 ## Documentation discipline
 
 - ALWAYS UPDATE DOCUMENTATION. The docs must always be up to date and reflect the current state of the project.
-- Treat slice task status as evidence-based tracking, not conversational state.
+- `docs/product-overview.md` is the source of truth for product behavior and requirements. Any mergeable change must match it, or update it in the same branch.
+- PR review should explicitly check that the implementation matches `docs/product-overview.md`, and that file should be updated whenever the product truth changes.
+- Treat task status as evidence-based tracking, not conversational state.
 - Do not update a task to `in progress` or `done` unless the underlying work has actually started or satisfied the acceptance criteria.
 - If the user is asking for guidance only, prefer leaving task statuses unchanged and add or update notes only when they capture a durable decision.
 

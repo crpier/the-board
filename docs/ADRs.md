@@ -1,7 +1,7 @@
 # ADRs
 
 Status: active
-Last updated: 2026-04-09
+Last updated: 2026-04-10
 
 ## 0001 - Documentation Structure
 
@@ -20,18 +20,19 @@ The active documentation structure is:
 
 - `README.md` as the entry point for users and contributors
 - `docs/product-overview.md` for enduring product rules and product-level scope
+- `docs/ROADMAP.md` for likely next slices and medium-term direction
 - `docs/ADRs.md` for architecture decision records
 - `docs/standards/` for repo standards and working agreements
-- `docs/slices/<slice-name>/PRD.md` for slice requirements
-- `docs/slices/<slice-name>/TASKS.md` for slice task tracking and status
+- root-level `PRD.md` for active-slice requirements while work is in progress
+- root-level `TASKS.md` for active-slice task tracking while work is in progress
 - `mockups/` for visual references
 
 ### Consequences
 
 - Product requirements stay separate from high-level product overview.
-- Each vertical slice keeps its PRD and task tracking together.
+- Future work can stay lightweight in `docs/ROADMAP.md` without pretending it is fully specified.
 - Cross-cutting technical decisions have one durable home.
-- Slice execution details live with the slice instead of in a separate plan document.
+- `PRD.md` and `TASKS.md` are intentionally temporary and should be removed or promoted into durable docs before merge.
 
 ## 0002 - Feature Definition Workflow
 
@@ -49,8 +50,8 @@ The docs should support that workflow without restating the same instructions in
 The default workflow for a new feature is:
 
 - `/grill-me` to resolve the feature through user interview
-- `/write-a-prd` to produce `docs/slices/<slice-name>/PRD.md`
-- `/prd-to-tasks` to produce `docs/slices/<slice-name>/TASKS.md`
+- `/write-a-prd` to produce root-level `PRD.md`
+- `/prd-to-tasks` to produce root-level `TASKS.md`
 - implement the slice tasks on a branch
 - open a draft pull request that captures scope, verification, and follow-up work
 - `/improve-codebase-architecture` before merging and closing the slice
@@ -60,7 +61,7 @@ The skills own the detailed process. The docs hold the resulting product and exe
 ### Consequences
 
 - The repo documents the workflow at a high level without duplicating skill instructions.
-- Slice artifacts should stay compatible with the skills that generate them.
+- Active-slice artifacts should stay compatible with the skills that generate them.
 - Process changes should usually happen in the skills first, with docs updated only where the visible workflow changes.
 - Slice completion includes an explicit pre-merge architecture review step.
 
