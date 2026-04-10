@@ -35,7 +35,7 @@ function handleDownvote(_memeId: Meme["_id"]) {}
 
 export function MemeCard(props: { meme: Meme }) {
   return (
-    <article class="overflow-hidden rounded-2xl border border-white/[0.06] bg-gradient-to-b from-[rgba(30,30,40,0.9)] to-[rgba(18,18,24,0.95)] transition-shadow duration-200 hover:shadow-[0_0_20px_rgba(99,230,190,0.05)]">
+    <article class="overflow-hidden rounded-2xl border border-white bg-gradient-to-b">
       {/* ── Title (when present) ── */}
       <Show when={props.meme.title}>
         {(title) => (

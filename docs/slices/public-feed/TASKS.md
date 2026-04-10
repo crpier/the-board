@@ -54,32 +54,9 @@ Expand the working feed into the intended browse-first experience by adding the 
 - User story 3
 - User story 8
 
-## Task 3 - Integrate feed cards with the canonical detail route
+## Task 3 - Add infinite scroll to the public feed
 
-Status: todo
-
-### What to build
-
-Connect the public feed cards to the canonical meme detail route once that route exists. This task should make card navigation consistent with the product's single-item destination without blocking the feed slice's earlier browse-first work.
-
-### Acceptance criteria
-
-- [ ] Each rendered feed item links to its canonical meme detail route.
-- [ ] The canonical detail route remains the destination when opening a meme from the feed.
-- [ ] Feed navigation uses the same meme identity and route shape expected by the detail slice.
-
-### Blocked by
-
-- Blocked by Task 2
-- External dependency: the canonical public detail route from `docs/slices/meme-detail/TASKS.md` should exist.
-
-### User stories addressed
-
-- User story 5
-
-## Task 4 - Add infinite scroll to the public feed
-
-Status: todo
+Status: done
 
 ### What to build
 
@@ -87,21 +64,21 @@ Turn the enriched feed into a continuous browsing surface with progressive loadi
 
 ### Acceptance criteria
 
-- [ ] The public feed progressively loads additional real items without manual pagination.
-- [ ] Newly loaded items continue to respect the same public visibility and ready-state rules.
-- [ ] Feed ordering remains reverse chronological across the initial load and subsequent loads.
-- [ ] The empty state from Task 1 still appears correctly when no public ready memes exist.
+- [x] The public feed progressively loads additional real items without manual pagination.
+- [x] Newly loaded items continue to respect the same public visibility and ready-state rules.
+- [x] Feed ordering remains reverse chronological across the initial load and subsequent loads.
+- [x] The empty state from Task 1 still appears correctly when no public ready memes exist.
 
 ### Blocked by
 
-- Blocked by Task 3
+- Blocked by Task 2
 
 ### User stories addressed
 
 - User story 2
 - User story 8
 
-## Task 5 - Mirror voting behavior into the feed
+## Task 4 - Mirror voting behavior into the feed
 
 Status: todo
 
@@ -118,7 +95,7 @@ Extend the established voting behavior into the public feed so feed cards suppor
 
 ### Blocked by
 
-- Blocked by Task 4
+- Blocked by Task 3
 - External dependency: auth-aware detail voting from `docs/slices/meme-detail/TASKS.md` should already exist.
 
 ### User stories addressed
@@ -126,24 +103,23 @@ Extend the established voting behavior into the public feed so feed cards suppor
 - User story 6
 - User story 7
 
-## Task 6 - Verify public feed behavior end to end
+## Task 5 - Verify public feed behavior end to end
 
 Status: todo
 
 ### What to build
 
-Add focused verification for the externally visible behavior promised by this slice. Tests should prove feed behavior, ordering, feed-to-detail navigation, progressive loading, and voting behavior without depending on shallow internal structure.
+Add focused verification for the externally visible behavior promised by this slice. Tests should prove feed behavior, ordering, progressive loading, and voting behavior without depending on shallow internal structure.
 
 ### Acceptance criteria
 
 - [ ] Tests cover public feed visibility rules, reverse-chronological ordering, and empty-state behavior.
-- [ ] Tests cover the feed's integration with the canonical detail route.
 - [ ] Tests cover infinite-scroll behavior.
 - [ ] Tests cover disabled signed-out feed voting controls and authenticated feed voting behavior.
 
 ### Blocked by
 
-- Blocked by Task 5
+- Blocked by Task 4
 
 ### User stories addressed
 
@@ -151,12 +127,11 @@ Add focused verification for the externally visible behavior promised by this sl
 - User story 2
 - User story 3
 - User story 4
-- User story 5
 - User story 6
 - User story 7
 - User story 8
 
-## Task 7 - Run slice closeout architecture review
+## Task 6 - Run slice closeout architecture review
 
 Status: todo
 
@@ -173,7 +148,7 @@ Run `/improve-codebase-architecture` on the completed slice before considering i
 
 ### Blocked by
 
-- Blocked by Task 6
+- Blocked by Task 5
 
 ### User stories addressed
 
