@@ -13,6 +13,7 @@ The goal is to learn a modern web stack by building something real enough to for
 ## Current stack direction
 
 - Frontend: `SolidStart` + `TypeScript`
+- Rendering: client-side rendering (`CSR`); the app does not use server-side rendering
 - Backend: `Convex`
 - Auth direction: Convex Auth with Google
 - Styling direction: Tailwind CSS
