@@ -1,7 +1,7 @@
 # Product Overview
 
 Status: draft
-Last updated: 2026-04-04
+Last updated: 2026-05-04
 
 ## Product summary
 
@@ -19,6 +19,7 @@ This repo is a learning vehicle first and a meme web app second.
 - Prefer short decision notes over long speculative planning.
 - When stuck, choose the smallest end-to-end step that teaches something important about the stack.
 - After each meaningful step, write down what changed, what was learned, and what comes next.
+- Prefer client-side rendering backed directly by Convex over adding a separate server-side rendering backend.
 
 ## Users
 
@@ -29,6 +30,7 @@ This repo is a learning vehicle first and a meme web app second.
 ## Core experience
 
 - Browsing public memes should work without signing in.
+- Public browsing may show a short client-side loading state before feed data appears.
 - The feed should feel rich, scan-friendly, and metadata-heavy rather than toy-like.
 - Opening a meme should lead to a canonical detail page with fuller context.
 - Signed-out users should clearly see that participation exists, even when controls are disabled.
