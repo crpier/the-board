@@ -41,6 +41,7 @@
 
 ## Workflow
 
+- This project uses `pnpm`; do not suggest `npm install`, `npm run`, `npx`, or other package-manager commands when there is a `pnpm` equivalent. Prefer `pnpm add`, `pnpm <script>`, and `pnpm dlx`/`pnpm exec` as appropriate.
 - New features should usually follow: `/grill-me` -> `/write-a-prd` -> `/prd-to-tasks`.
 - Do not push directly to `main`; create a branch for the work and open a draft pull request.
 - Prefer creating an appropriately named branch before starting a new batch of work so the branch can hold exploration, docs updates, and implementation together.
