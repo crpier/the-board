@@ -7,7 +7,7 @@ import {
   type Accessor,
 } from "solid-js";
 import { createContextProvider } from "@solid-primitives/context";
-import { ConvexClient } from "convex/browser";
+import { ConvexClient, type OptimisticUpdate } from "convex/browser";
 import {
   type FunctionReference,
   type FunctionArgs,
@@ -151,8 +151,14 @@ interface MutationReturn<TArgs, TResult> {
 }
 
 // Mutation hook
+//
+// Pass `optimisticUpdate` to patch query caches while the mutation is in flight.
+// `ConvexClient.mutation` forwards the option to the underlying
+// `BaseConvexClient`, which applies the patch immediately and rolls it back
+// automatically once the mutation settles (on success or error).
 export function useMutation<Mutation extends FunctionReference<"mutation">>(
   mutation: Mutation,
+  optimisticUpdate?: OptimisticUpdate<FunctionArgs<Mutation>>,
 ): MutationReturn<FunctionArgs<Mutation>, FunctionReturnType<Mutation>> {
   type Args = FunctionArgs<Mutation>;
   type Result = FunctionReturnType<Mutation>;
@@ -170,7 +176,11 @@ export function useMutation<Mutation extends FunctionReference<"mutation">>(
     setState({ isLoading: true });
 
     try {
-      const result = await client.mutation(mutation, args);
+      const result = await client.mutation(
+        mutation,
+        args,
+        optimisticUpdate ? { optimisticUpdate } : undefined,
+      );
       setState({ data: result, isLoading: false });
       return result;
     } catch (error) {
