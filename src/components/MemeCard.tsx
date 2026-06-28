@@ -1,17 +1,11 @@
 import type { Doc } from "@convex/_generated/dataModel";
-import {
-  ArrowBigDown,
-  ArrowBigUp,
-  Bookmark,
-  MessageCircle,
-  Share2,
-} from "lucide-solid";
 import { For, Show } from "solid-js";
 import {
   differenceInMinutes,
   differenceInHours,
   differenceInDays,
 } from "date-fns";
+import { VoteControl } from "~/components/VoteControl";
 
 type Meme = Doc<"memes">;
 
@@ -28,10 +22,6 @@ function formatTimeAgo(creationTime: number): string {
   const days = differenceInDays(new Date(), date);
   return `${days}d ago`;
 }
-
-/** Placeholder — you'll replace this with real vote handling. */
-function handleUpvote(_memeId: Meme["_id"]) {}
-function handleDownvote(_memeId: Meme["_id"]) {}
 
 export function MemeCard(props: { meme: Meme }) {
   return (
@@ -83,39 +73,11 @@ export function MemeCard(props: { meme: Meme }) {
 
         {/* Actions + meta row */}
         <div class="flex items-center gap-3">
-          {/* Upvote */}
-          <button
-            class="flex cursor-pointer items-center gap-1 text-xs text-emerald-500 transition-opacity hover:opacity-80"
-            onClick={() => handleUpvote(props.meme._id)}
-          >
-            <ArrowBigUp class="h-3.5 w-3.5" />
-            {props.meme.upvoteCount}
-          </button>
-
-          {/* Downvote */}
-          <button
-            class="flex cursor-pointer items-center gap-1 text-xs text-orange-500 transition-opacity hover:opacity-80"
-            onClick={() => handleDownvote(props.meme._id)}
-          >
-            <ArrowBigDown class="h-3.5 w-3.5" />
-            {props.meme.downvoteCount}
-          </button>
-
-          {/* Comment — placeholder */}
-          <button class="flex cursor-pointer items-center gap-1 text-xs text-[#8b8b9e] transition-opacity hover:opacity-80">
-            <MessageCircle class="h-3.5 w-3.5" />
-            {/* TODO: wire real comment count */}0
-          </button>
-
-          {/* Share — placeholder */}
-          <button class="cursor-pointer text-[#8b8b9e] transition-opacity hover:opacity-80">
-            <Share2 class="h-3.5 w-3.5" />
-          </button>
-
-          {/* Bookmark — placeholder */}
-          <button class="cursor-pointer text-[#8b8b9e] transition-opacity hover:opacity-80">
-            <Bookmark class="h-3.5 w-3.5" />
-          </button>
+          <VoteControl
+            memeId={props.meme._id}
+            initialUpvoteCount={props.meme.upvoteCount}
+            initialDownvoteCount={props.meme.downvoteCount}
+          />
 
           {/* Author + time — pushed to the right */}
           <span class="ml-auto cursor-pointer text-[11px] text-[#6a6a7e]">
