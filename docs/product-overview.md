@@ -115,6 +115,13 @@ The product should let guests browse public content immediately, let authenticat
 
 ## Open product questions
 
-- How prominent should sign-in prompts be around disabled participation controls?
 - How much of search belongs in the first browse experience versus later discovery work?
 - When should duplicate detection expand from exact matching into perceptual and AI-assisted analysis?
+
+## Resolved product questions
+
+- Sign-in prompts around disabled participation controls stay subtle: voting
+  controls render visibly disabled with aggregate counts still shown, and a
+  lightweight "Sign in to vote" affordance appears on interaction — no modal or
+  redirect. Resolved in the Voting slice; may be escalated later if participation
+  is too easy to miss.
