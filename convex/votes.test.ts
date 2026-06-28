@@ -50,8 +50,10 @@ function readMeme(t: ReturnType<typeof convexTest>, memeId: Id<"memes">) {
 
 function countVotes(t: ReturnType<typeof convexTest>, memeId: Id<"memes">) {
   return t.run(async (ctx) => {
-    const rows = await ctx.db.query("votes").collect();
-    return rows.filter((r) => r.memeId === memeId);
+    return await ctx.db
+      .query("votes")
+      .withIndex("by_meme", (q) => q.eq("memeId", memeId))
+      .collect();
   });
 }
 
@@ -180,11 +182,16 @@ describe("castVote", () => {
   test("a user may vote on their own meme", async () => {
     const { t, userId, memeId, asUser } = await setup();
 
-    // Make the voter the author of the meme.
-    await t.run(async (ctx) => {
-      await ctx.db.patch(memeId, { authorName: "Tester" });
+    // Votes carry no ownership model (ADR 0004), so authoring a meme must not
+    // block voting on it. `authorName` is the only authorship signal the schema
+    // records, so assert the voting user is in fact this meme's recorded author
+    // before voting — otherwise the test would prove nothing about self-votes.
+    const author = await t.run(async (ctx) => {
+      const user = await ctx.db.get(userId);
+      const meme = await ctx.db.get(memeId);
+      return { userName: user?.name, authorName: meme?.authorName };
     });
-    expect(userId).toBeDefined();
+    expect(author.authorName).toBe(author.userName);
 
     await asUser.mutation(api.votes.castVote, { memeId, value: "up" });
 
@@ -196,22 +203,28 @@ describe("castVote", () => {
   test("counters never go negative and stay equal to row counts", async () => {
     const { t, memeId, asUser } = await setup();
 
-    // Drift the stored count below what votes justify, then clear a vote.
+    // `castVote` is the only writer (ADR 0004), so a decrement always matches an
+    // existing row: clearing a vote returns the counter to 0 rather than going
+    // negative, with no defensive clamp masking drift. Walk a full vote / flip /
+    // clear cycle and assert the aggregate equals the row count at every step.
+    const assertInvariant = async (up: number, down: number) => {
+      const meme = await readMeme(t, memeId);
+      const votes = await countVotes(t, memeId);
+      expect(meme.upvoteCount).toBe(up);
+      expect(meme.downvoteCount).toBe(down);
+      expect(meme.upvoteCount).toBeGreaterThanOrEqual(0);
+      expect(meme.downvoteCount).toBeGreaterThanOrEqual(0);
+      expect(meme.upvoteCount + meme.downvoteCount).toBe(votes.length);
+    };
+
     await asUser.mutation(api.votes.castVote, { memeId, value: "up" });
-    await t.run(async (ctx) => {
-      await ctx.db.patch(memeId, { upvoteCount: 0 });
-    });
+    await assertInvariant(1, 0);
 
-    // up -> up clears the single row; counter is clamped at 0 rather than -1.
-    await asUser.mutation(api.votes.castVote, { memeId, value: "up" });
+    await asUser.mutation(api.votes.castVote, { memeId, value: "down" });
+    await assertInvariant(0, 1);
 
-    const meme = await readMeme(t, memeId);
-    expect(meme.upvoteCount).toBe(0);
-    expect(meme.downvoteCount).toBe(0);
-
-    const votes = await countVotes(t, memeId);
-    expect(votes).toHaveLength(0);
-    expect(meme.upvoteCount + meme.downvoteCount).toBe(votes.length);
+    await asUser.mutation(api.votes.castVote, { memeId, value: "down" });
+    await assertInvariant(0, 0);
   });
 
   test("aggregate counts equal the number of vote rows across users", async () => {

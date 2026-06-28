@@ -13,8 +13,11 @@ import { mutation } from "./_generated/server";
  *
  * The meme's denormalized `upvoteCount` / `downvoteCount` are adjusted in the
  * same transaction so they always equal the number of vote rows. This is the
- * only path that mutates vote counts. Counters are clamped at zero so a drifted
- * count can never go negative.
+ * only path that mutates vote counts, so the counters cannot drift and a
+ * decrement always corresponds to an existing row — the counts therefore can
+ * never go negative by construction (see ADR 0004). No defensive clamp is
+ * applied, because clamping each counter independently would let a flip from an
+ * already-drifted count diverge from the true row total.
  */
 export const castVote = mutation({
   args: {
@@ -76,8 +79,8 @@ export const castVote = mutation({
     }
 
     await ctx.db.patch(args.memeId, {
-      upvoteCount: Math.max(0, meme.upvoteCount + upDelta),
-      downvoteCount: Math.max(0, meme.downvoteCount + downDelta),
+      upvoteCount: meme.upvoteCount + upDelta,
+      downvoteCount: meme.downvoteCount + downDelta,
     });
   },
 });

@@ -43,5 +43,7 @@ export default defineSchema({
     userId: v.id("users"),
     memeId: v.id("memes"),
     value: v.union(v.literal("up"), v.literal("down")),
-  }).index("by_user_and_meme", ["userId", "memeId"]),
+  })
+    .index("by_user_and_meme", ["userId", "memeId"])
+    .index("by_meme", ["memeId"]),
 });
