@@ -39,4 +39,9 @@ export default defineSchema({
     upvoteCount: v.number(),
     downvoteCount: v.number(),
   }).index("by_visibility_and_status", ["visibility", "status"]),
+  votes: defineTable({
+    userId: v.id("users"),
+    memeId: v.id("memes"),
+    value: v.union(v.literal("up"), v.literal("down")),
+  }).index("by_user_and_meme", ["userId", "memeId"]),
 });
