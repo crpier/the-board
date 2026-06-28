@@ -122,6 +122,6 @@ The product should let guests browse public content immediately, let authenticat
 
 - Sign-in prompts around disabled participation controls stay subtle: voting
   controls render visibly disabled with aggregate counts still shown, and a
-  lightweight "Sign in to vote" affordance appears on interaction — no modal or
-  redirect. Resolved in the Voting slice; may be escalated later if participation
-  is too easy to miss.
+  lightweight "Sign in to vote" tooltip surfaces on the controls — clicking does
+  nothing, with no modal or redirect. Resolved in the Voting slice; may be
+  escalated later if participation is too easy to miss.
