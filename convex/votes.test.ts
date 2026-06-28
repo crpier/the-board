@@ -40,6 +40,18 @@ async function setup(memeOverrides: Record<string, unknown> = {}) {
   return { t, userId, memeId, asUser };
 }
 
+/**
+ * Seed an additional user and return a client scoped to them, mirroring the
+ * `userId|sessionId` subject shape `getAuthUserId` parses (see `setup`).
+ */
+async function addUser(t: ReturnType<typeof convexTest>, name: string) {
+  const userId = await t.run(async (ctx) => {
+    return await ctx.db.insert("users", { name });
+  });
+
+  return { userId, asUser: t.withIdentity({ subject: `${userId}|session` }) };
+}
+
 function readMeme(t: ReturnType<typeof convexTest>, memeId: Id<"memes">) {
   return t.run(async (ctx) => {
     const meme = await ctx.db.get(memeId);
@@ -231,10 +243,7 @@ describe("castVote", () => {
     const { t, memeId, asUser } = await setup();
 
     // Second user, voting down on the same meme.
-    const otherUserId = await t.run(async (ctx) => {
-      return await ctx.db.insert("users", { name: "Other" });
-    });
-    const asOther = t.withIdentity({ subject: `${otherUserId}|session` });
+    const { asUser: asOther } = await addUser(t, "Other");
 
     await asUser.mutation(api.votes.castVote, { memeId, value: "up" });
     await asOther.mutation(api.votes.castVote, { memeId, value: "down" });
@@ -244,5 +253,83 @@ describe("castVote", () => {
     expect(meme.upvoteCount).toBe(1);
     expect(meme.downvoteCount).toBe(1);
     expect(meme.upvoteCount + meme.downvoteCount).toBe(votes.length);
+  });
+});
+
+describe("cardState", () => {
+  test("signed-out viewers get counts and myVote: null", async () => {
+    const { t, memeId, asUser } = await setup();
+
+    // Seed a vote from a signed-in user so the counts are non-trivial.
+    await asUser.mutation(api.votes.castVote, { memeId, value: "up" });
+
+    const state = await t.query(api.votes.cardState, { memeId });
+    expect(state).toEqual({
+      upvoteCount: 1,
+      downvoteCount: 0,
+      myVote: null,
+    });
+  });
+
+  test("signed-in viewer sees their own vote", async () => {
+    const { memeId, asUser } = await setup();
+
+    await asUser.mutation(api.votes.castVote, { memeId, value: "down" });
+
+    const state = await asUser.query(api.votes.cardState, { memeId });
+    expect(state).toEqual({
+      upvoteCount: 0,
+      downvoteCount: 1,
+      myVote: "down",
+    });
+  });
+
+  test("signed-in viewer with no vote gets myVote: null", async () => {
+    const { memeId, asUser } = await setup();
+
+    const state = await asUser.query(api.votes.cardState, { memeId });
+    expect(state).toEqual({
+      upvoteCount: 0,
+      downvoteCount: 0,
+      myVote: null,
+    });
+  });
+
+  test("myVote reflects only the viewer's vote, not others'", async () => {
+    const { t, memeId, asUser } = await setup();
+
+    const { asUser: asOther } = await addUser(t, "Other");
+
+    await asUser.mutation(api.votes.castVote, { memeId, value: "up" });
+    await asOther.mutation(api.votes.castVote, { memeId, value: "down" });
+
+    const state = await asUser.query(api.votes.cardState, { memeId });
+    expect(state).toEqual({
+      upvoteCount: 1,
+      downvoteCount: 1,
+      myVote: "up",
+    });
+  });
+
+  test("returns null for a missing meme", async () => {
+    const { t, memeId, asUser } = await setup();
+
+    await t.run(async (ctx) => {
+      await ctx.db.delete(memeId);
+    });
+
+    expect(await asUser.query(api.votes.cardState, { memeId })).toBeNull();
+  });
+
+  test("returns null for a non-public meme", async () => {
+    const { memeId, asUser } = await setup({ visibility: "private" });
+
+    expect(await asUser.query(api.votes.cardState, { memeId })).toBeNull();
+  });
+
+  test("returns null for a non-ready meme", async () => {
+    const { memeId, asUser } = await setup({ status: "processing" });
+
+    expect(await asUser.query(api.votes.cardState, { memeId })).toBeNull();
   });
 });
