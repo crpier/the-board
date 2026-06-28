@@ -5,6 +5,7 @@ import { Suspense } from "solid-js";
 import "./app.css";
 import { ConvexProvider } from "~/lib/convex-solid";
 import { convex } from "~/lib/convex";
+import { ConvexAuthProvider } from "./lib/convex-auth-solid";
 
 export default function App() {
   return (
@@ -13,7 +14,9 @@ export default function App() {
         <MetaProvider>
           <Title>the-board</Title>
           <ConvexProvider client={convex}>
-            <Suspense>{props.children}</Suspense>
+            <ConvexAuthProvider client={convex}>
+              <Suspense>{props.children}</Suspense>
+            </ConvexAuthProvider>
           </ConvexProvider>
         </MetaProvider>
       )}

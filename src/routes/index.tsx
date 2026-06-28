@@ -5,6 +5,8 @@ import { MemeCard } from "~/components/MemeCard";
 import { Doc } from "@convex/_generated/dataModel";
 import { api } from "@convex/_generated/api";
 import { convex } from "~/lib/convex";
+import Navbar from "~/components/Navbar";
+import { current } from "@convex/viewer";
 
 type Meme = Doc<"memes">;
 
@@ -78,6 +80,7 @@ export default function Home() {
 
   return (
     <main class="mx-auto max-w-2xl space-y-5 px-5 py-6">
+      <Navbar></Navbar>
       <Title>The Board</Title>
       <Show
         when={memes.data() !== undefined || memes.error()}

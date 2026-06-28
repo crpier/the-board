@@ -1,24 +1,19 @@
 # Product Overview
 
-Status: draft
-Last updated: 2026-05-04
-
 ## Product summary
 
 `the-board` is a browse-first meme app for public media posts with lightweight social interaction, simple admin moderation, and a strong visual identity.
 
 The product should let guests browse public content immediately, let authenticated users participate through voting and later ownership flows, and keep the core rules understandable even as the system behind them grows more capable.
 
-This repo is a learning vehicle first and a meme web app second.
-
 ## Working principles
 
-- Prefer clarity and teachable patterns over maximum speed or cleverness.
-- Use AI assistance for guidance, explanation, and workflow suggestions more than bulk implementation.
+- Prefer clarity over maximum speed or cleverness.
+- Use AI to implement the work, reviewed and refined before it merges.
 - Build in small vertical slices, not broad horizontal layers.
 - Prefer short decision notes over long speculative planning.
-- When stuck, choose the smallest end-to-end step that teaches something important about the stack.
-- After each meaningful step, write down what changed, what was learned, and what comes next.
+- When stuck, choose the smallest end-to-end step that moves the slice forward.
+- After each meaningful step, write down what changed and what comes next.
 - Prefer client-side rendering backed directly by Convex over adding a separate server-side rendering backend.
 
 ## Users

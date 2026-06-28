@@ -2,64 +2,50 @@
 
 ## Working mode
 
-- This repo is a learning project first; the app domain is mainly a vehicle for learning the stack.
+- Default to builder mode: implement the work, then make it reviewable and explain it.
 - Prefer idiomatic solutions for the stack being used, even when they require harder or deeper changes than a quick workaround.
-- Prefer guidance, explanation, patterns, and next-step recommendations over writing implementation code.
-- Default to coach mode, not builder mode.
-- Do not write or edit code, run builds or tests, create branches, or make product changes unless the user explicitly asks for that execution.
-- When the user wants to learn, guide them through the work step by step so they can make the changes themselves.
-- If a user message is ambiguous about whether to execute changes or continue coaching, default to coaching and clarify only if the distinction matters.
-- Treat short follow-ups such as "let's do that" or "go ahead" as referring to the current coaching flow unless the user explicitly asks you to make the change yourself.
+- Write clear, idiomatic code, with non-obvious decisions explained.
+- After making changes, walk the user through what changed and why, and call out the parts most worth scrutinizing.
+- Keep changes in small, reviewable slices.
+- If a user message is ambiguous about whether to implement or only discuss, default to implementing and explaining, and clarify only if the distinction matters.
+- Treat short follow-ups such as "let's do that" or "go ahead" as approval to make the change and then walk the user through it for review.
 
-## Guidance style
+## Review and explanation style
 
-- Prefer concrete, hands-on guidance such as: what file to open, what to look for, what to change, why the change matters, and how to verify it.
-- Prefer concise, screen-friendly guidance that can be followed without scrolling when practical.
+- After implementing, explain the change so the user can review it: what files changed, what each change does, why it matters, and how to verify it.
+- Prefer concise, screen-friendly explanations that can be followed without scrolling when practical.
 - Prefer prose-first explanations with bullet lists used sparingly, mainly when they genuinely improve clarity.
 - Prefer slightly more concise explanations over exhaustive breakdowns when both would be clear.
-- When evaluating alternatives, prefer changes that preserve idiomatic architecture, conventions, and good practices over easier changes that make the codebase feel unusual for the stack.
-- When implementation guidance is useful, default to clear examples that are ready to adapt: function stubs, small code snippets, or even full functions, plus exactly where they should go and a short explanation of what and why.
-- Prefer minimal, targeted change instructions over full-file rewrites when guiding edits to existing files.
-- When possible, show only the lines to add, remove, or replace, and say exactly where the change goes.
+- Prefer idiomatic architecture, conventions, and good practices over easier changes that make the codebase feel unusual for the stack, and say when you made that tradeoff.
+- Proactively flag the parts of a change the user should scrutinize: tradeoffs, alternatives you considered and rejected, and anything non-obvious or easy to get wrong.
+- Keep diffs minimal and focused so the change is easy to review; avoid unrelated edits and large rewrites when a targeted change works.
+- Treat user pushback and "why did you do it this way?" as review comments: explain the reasoning, and revise the code if the critique holds.
 - When showing fenced code blocks, include the language whenever it is known.
-- Do not hold back concrete examples just because the user has not asked for direct code edits; examples are encouraged, but do not apply the change unless explicitly instructed.
-- When suggesting an implementation step, make it explicit whether the user should make the change or whether you are proposing to make it.
 - If the user asks to change the assistant's style, also update this file to reflect that new standing preference unless the user explicitly says the style change is only for the current conversation.
 - Always preserve the ability to answer: "what is my next step?"
 
-## Repo map
-
-- Keep `README.md` high-signal and durable; do not add transient workflow state, recommended immediate next slices, or other spurious planning details there.
-- Design references live in the `mockups/` folder.
-- `README.md` remains the entry point.
-- `docs/ROADMAP.md` holds likely next slices and medium-term direction.
-- `docs/product-overview.md` is the current product overview.
-- `docs/ADRs.md` holds architecture decision records.
-- `docs/standards/` holds repo standards for code style, and commit/PR shape.
-- Root-level `PRD.md` and `TASKS.md` are temporary planning files for the active slice only.
-- `mockups/index-mockup.html` remains the current design mockup reference.
-
 ## Workflow
 
-- New features should usually follow: `/grill-me` -> `/write-a-prd` -> `/prd-to-tasks`.
-- Do not push directly to `main`; create a branch for the work and open a draft pull request.
-- Prefer creating an appropriately named branch before starting a new batch of work so the branch can hold exploration, docs updates, and implementation together.
-- When the user asks to push changes, also create the draft pull request unless they explicitly say not to.
-- Only mark a pull request as ready for review when the user explicitly asks for that change.
-- Before closing a slice, run the `/improve-codebase-architecture` skill and capture any accepted refactors in docs.
-- Use root-level `PRD.md` and `TASKS.md` only while a slice is active on its branch.
-- `PRD.md` and `TASKS.md` should not exist in a mergeable pull request; either delete them before review or promote any durable decisions into `docs/product-overview.md`, `docs/ADRs.md`, `docs/ROADMAP.md`, or the standards docs.
-- Keep workflow details in the skills; keep resulting decisions in the docs.
-- Use progressive disclosure when consulting standards: load only the docs relevant to the task at hand.
+- This project uses `pnpm`; do not suggest `npm install`, `npm run`, `npx`, or other package-manager commands when there is a `pnpm` equivalent. Prefer `pnpm add`, `pnpm <script>`, and `pnpm dlx`/`pnpm exec` as appropriate.
+
+## GitHub workflow
+
+- Use the `gh` CLI for GitHub interactions: issues, PRs, comments, labels, and repo metadata.
+- Do not hand-edit GitHub URLs or assume issue state; query with `gh issue view/list` and `gh pr view/list` when needed.
+- When there is a relevant GitHub issue, reference it from the implementation work and PR.
+- When starting a new unit of work, stash any uncommitted changes, run `git fetch`, then create a new branch from the latest `origin/main`.
+- Open the PR against `main`; only merge it when explicitly told to.
+- When passing multiline text to `gh`, use `--body-file` with a real file or a heredoc; do not pass escaped `\n` sequences. Verify rendered bodies with `gh pr view` or `gh issue view`.
 
 ## Documentation discipline
 
 - ALWAYS UPDATE DOCUMENTATION. The docs must always be up to date and reflect the current state of the project.
 - `docs/product-overview.md` is the source of truth for product behavior and requirements. Any mergeable change must match it, or update it in the same branch.
 - PR review should explicitly check that the implementation matches `docs/product-overview.md`, and that file should be updated whenever the product truth changes.
-- Treat task status as evidence-based tracking, not conversational state.
-- Do not update a task to `in progress` or `done` unless the underlying work has actually started or satisfied the acceptance criteria.
-- If the user is asking for guidance only, prefer leaving task statuses unchanged and add or update notes only when they capture a durable decision.
+- Record durable cross-cutting decisions in `docs/adr/`, one file per decision.
+- Project state lives in GitHub issues, not in markdown files: planning, tasks, and roadmap are tracked there, with epics grouping related task issues.
+- Treat issue status as evidence-based tracking, not conversational state. Do not close an issue or check off its acceptance criteria unless the underlying work actually satisfies them.
+- If the user is asking for guidance only, leave issue state unchanged and add a comment only when it captures a durable decision.
 
 <!-- convex-ai-start -->
 
