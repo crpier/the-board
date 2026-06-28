@@ -6,6 +6,8 @@
     "build": "vinxi build",
     "start": "vinxi start",
     "preview": "vinxi preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "format": "prettier --write \"**/*.{js,ts,jsx,tsx,css,md,yml,yaml,json}\"",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
@@ -32,17 +34,20 @@
     "node": ">=22"
   },
   "devDependencies": {
+    "@edge-runtime/vm": "^5.0.0",
     "@eslint/js": "^10.0.1",
     "@types/node": "^25.5.2",
     "@typescript-eslint/eslint-plugin": "^8.58.1",
     "@typescript-eslint/parser": "^8.58.1",
+    "convex-test": "^0.0.54",
     "eslint": "^10.2.0",
     "eslint-plugin-solid": "^0.14.5",
     "husky": "^9.1.7",
     "lint-staged": "^16.4.0",
     "prettier": "^3.8.1",
     "prettier-plugin-tailwindcss": "^0.7.2",
-    "typescript-eslint": "^8.58.1"
+    "typescript-eslint": "^8.58.1",
+    "vitest": "^4.1.9"
   },
   "lint-staged": {
     "*": "prettier --ignore-unknown --check",
