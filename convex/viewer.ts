@@ -18,8 +18,8 @@ export const current = query({
     return {
       id: user._id,
       displayName: user.name ?? "Anon",
-      avatarUrl:
-        user.image ?? "https://avatars.githubusercontent.com/u/322913?v=4",
+      // Null when Google gave us no picture; the UI falls back to an initial.
+      avatarUrl: user.image ?? null,
       isAdmin: user.isAdmin ?? false,
     };
   },

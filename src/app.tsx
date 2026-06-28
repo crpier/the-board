@@ -6,6 +6,7 @@ import "./app.css";
 import { ConvexProvider } from "~/lib/convex-solid";
 import { convex } from "~/lib/convex";
 import { ConvexAuthProvider } from "./lib/convex-auth-solid";
+import Navbar from "~/components/Navbar";
 
 export default function App() {
   return (
@@ -15,6 +16,7 @@ export default function App() {
           <Title>the-board</Title>
           <ConvexProvider client={convex}>
             <ConvexAuthProvider client={convex}>
+              <Navbar />
               <Suspense>{props.children}</Suspense>
             </ConvexAuthProvider>
           </ConvexProvider>
