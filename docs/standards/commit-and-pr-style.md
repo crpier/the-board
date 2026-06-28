@@ -1,8 +1,5 @@
 # Commit and PR Style
 
-Status: draft
-Last updated: 2026-04-05
-
 ## Purpose
 
 Define how commits and pull requests should read in this repo.
@@ -38,13 +35,12 @@ Define how commits and pull requests should read in this repo.
 - Call out follow-up work explicitly instead of hiding it in prose.
 - Keep PRs narrow enough to review coherently.
 - Ensure the implementation matches `docs/product-overview.md`, or update that file in the same branch.
-- `PRD.md` and `TASKS.md` may exist while a slice is active on its branch, but they should not exist in a mergeable pull request.
+- Reference the GitHub issue(s) the PR addresses so work stays traceable.
 
 ## Pull request checklist
 
 - State the scope of the change clearly.
-- Link the relevant ADRs or other durable docs.
+- Link the relevant GitHub issue(s), ADRs, or other durable docs.
 - Confirm the implementation is consistent with `docs/product-overview.md`, or note the matching product-overview update.
 - Summarize verification steps.
 - Note any accepted follow-ups or deferred work.
-- Confirm `PRD.md` and `TASKS.md` have been deleted or promoted into durable docs before merge.
