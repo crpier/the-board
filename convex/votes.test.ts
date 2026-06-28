@@ -40,6 +40,18 @@ async function setup(memeOverrides: Record<string, unknown> = {}) {
   return { t, userId, memeId, asUser };
 }
 
+/**
+ * Seed an additional user and return a client scoped to them, mirroring the
+ * `userId|sessionId` subject shape `getAuthUserId` parses (see `setup`).
+ */
+async function addUser(t: ReturnType<typeof convexTest>, name: string) {
+  const userId = await t.run(async (ctx) => {
+    return await ctx.db.insert("users", { name });
+  });
+
+  return { userId, asUser: t.withIdentity({ subject: `${userId}|session` }) };
+}
+
 function readMeme(t: ReturnType<typeof convexTest>, memeId: Id<"memes">) {
   return t.run(async (ctx) => {
     const meme = await ctx.db.get(memeId);
@@ -231,10 +243,7 @@ describe("castVote", () => {
     const { t, memeId, asUser } = await setup();
 
     // Second user, voting down on the same meme.
-    const otherUserId = await t.run(async (ctx) => {
-      return await ctx.db.insert("users", { name: "Other" });
-    });
-    const asOther = t.withIdentity({ subject: `${otherUserId}|session` });
+    const { asUser: asOther } = await addUser(t, "Other");
 
     await asUser.mutation(api.votes.castVote, { memeId, value: "up" });
     await asOther.mutation(api.votes.castVote, { memeId, value: "down" });
@@ -289,10 +298,7 @@ describe("cardState", () => {
   test("myVote reflects only the viewer's vote, not others'", async () => {
     const { t, memeId, asUser } = await setup();
 
-    const otherUserId = await t.run(async (ctx) => {
-      return await ctx.db.insert("users", { name: "Other" });
-    });
-    const asOther = t.withIdentity({ subject: `${otherUserId}|session` });
+    const { asUser: asOther } = await addUser(t, "Other");
 
     await asUser.mutation(api.votes.castVote, { memeId, value: "up" });
     await asOther.mutation(api.votes.castVote, { memeId, value: "down" });

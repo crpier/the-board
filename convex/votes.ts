@@ -4,6 +4,12 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 
 /**
+ * A cast vote's direction. Shared so `cardState.myVote` and `castVote.value`
+ * cannot drift; `myVote` widens it with `v.null()` for the no-vote case.
+ */
+const voteValue = v.union(v.literal("up"), v.literal("down"));
+
+/**
  * Per-card reactive vote state: aggregate counts plus the viewer's own vote.
  *
  * Every card subscribes to this query so counts and the viewer's vote stay live
@@ -27,7 +33,7 @@ export const cardState = query({
     v.object({
       upvoteCount: v.number(),
       downvoteCount: v.number(),
-      myVote: v.union(v.literal("up"), v.literal("down"), v.null()),
+      myVote: v.union(voteValue, v.null()),
     }),
   ),
   handler: async (ctx, args) => {
@@ -78,7 +84,7 @@ export const cardState = query({
 export const castVote = mutation({
   args: {
     memeId: v.id("memes"),
-    value: v.union(v.literal("up"), v.literal("down")),
+    value: voteValue,
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
