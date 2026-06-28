@@ -246,3 +246,84 @@ describe("castVote", () => {
     expect(meme.upvoteCount + meme.downvoteCount).toBe(votes.length);
   });
 });
+
+describe("cardState", () => {
+  test("signed-out viewers get counts and myVote: null", async () => {
+    const { t, memeId, asUser } = await setup();
+
+    // Seed a vote from a signed-in user so the counts are non-trivial.
+    await asUser.mutation(api.votes.castVote, { memeId, value: "up" });
+
+    const state = await t.query(api.votes.cardState, { memeId });
+    expect(state).toEqual({
+      upvoteCount: 1,
+      downvoteCount: 0,
+      myVote: null,
+    });
+  });
+
+  test("signed-in viewer sees their own vote", async () => {
+    const { memeId, asUser } = await setup();
+
+    await asUser.mutation(api.votes.castVote, { memeId, value: "down" });
+
+    const state = await asUser.query(api.votes.cardState, { memeId });
+    expect(state).toEqual({
+      upvoteCount: 0,
+      downvoteCount: 1,
+      myVote: "down",
+    });
+  });
+
+  test("signed-in viewer with no vote gets myVote: null", async () => {
+    const { memeId, asUser } = await setup();
+
+    const state = await asUser.query(api.votes.cardState, { memeId });
+    expect(state).toEqual({
+      upvoteCount: 0,
+      downvoteCount: 0,
+      myVote: null,
+    });
+  });
+
+  test("myVote reflects only the viewer's vote, not others'", async () => {
+    const { t, memeId, asUser } = await setup();
+
+    const otherUserId = await t.run(async (ctx) => {
+      return await ctx.db.insert("users", { name: "Other" });
+    });
+    const asOther = t.withIdentity({ subject: `${otherUserId}|session` });
+
+    await asUser.mutation(api.votes.castVote, { memeId, value: "up" });
+    await asOther.mutation(api.votes.castVote, { memeId, value: "down" });
+
+    const state = await asUser.query(api.votes.cardState, { memeId });
+    expect(state).toEqual({
+      upvoteCount: 1,
+      downvoteCount: 1,
+      myVote: "up",
+    });
+  });
+
+  test("returns null for a missing meme", async () => {
+    const { t, memeId, asUser } = await setup();
+
+    await t.run(async (ctx) => {
+      await ctx.db.delete(memeId);
+    });
+
+    expect(await asUser.query(api.votes.cardState, { memeId })).toBeNull();
+  });
+
+  test("returns null for a non-public meme", async () => {
+    const { memeId, asUser } = await setup({ visibility: "private" });
+
+    expect(await asUser.query(api.votes.cardState, { memeId })).toBeNull();
+  });
+
+  test("returns null for a non-ready meme", async () => {
+    const { memeId, asUser } = await setup({ status: "processing" });
+
+    expect(await asUser.query(api.votes.cardState, { memeId })).toBeNull();
+  });
+});
