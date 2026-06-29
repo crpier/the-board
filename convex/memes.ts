@@ -300,9 +300,9 @@ async function requireOwnedMeme(
  * the same `canonicalizeTags` path as `createMeme`, so edited and freshly
  * published tags normalize identically.
  *
- * `title` follows the publish convention: an omitted or blank value clears the
- * title (patching it to `undefined` removes the field) rather than storing an
- * empty string.
+ * `title` is trimmed server-side: an omitted or blank value clears the title
+ * (patching it to `undefined` removes the field) rather than storing an empty
+ * string, matching what the publish form sends.
  */
 export const updateMeme = mutation({
   args: {
@@ -342,16 +342,11 @@ export const deleteMeme = action({
   args: { memeId: v.id("memes") },
   returns: v.null(),
   handler: async (ctx, args): Promise<null> => {
-    const viewerId = await getAuthUserId(ctx);
-    if (viewerId === null) {
-      throw new Error("You must be signed in to manage a meme.");
-    }
-
-    // The tombstone (with its ownership check) commits before we touch R2, so
-    // the meme is hidden even if the object delete later fails.
+    // The tombstone (with its auth + ownership check) commits before we touch
+    // R2, so the meme is hidden even if the object delete later fails.
     const mediaKey: string = await ctx.runMutation(
       internal.memes.tombstoneMeme,
-      { memeId: args.memeId, viewerId },
+      { memeId: args.memeId },
     );
     await r2.deleteObject(ctx, mediaKey);
     return null;
@@ -359,16 +354,18 @@ export const deleteMeme = action({
 });
 
 /**
- * Tombstone a meme and return its R2 key for reclamation. Internal-only: the
- * viewer is derived server-side by `deleteMeme` and handed in, never accepted
- * from a client. The ownership gate lives here, inside the transaction, so the
- * status flip and the authorization check can't race.
+ * Tombstone a meme and return its R2 key for reclamation. Internal-only. The
+ * viewer is derived server-side from the auth context (which propagates through
+ * `ctx.runMutation` from `deleteMeme`), never accepted as an argument. The
+ * ownership gate lives here, inside the transaction, so the status flip and the
+ * authorization check can't race.
  */
 export const tombstoneMeme = internalMutation({
-  args: { memeId: v.id("memes"), viewerId: v.id("users") },
+  args: { memeId: v.id("memes") },
   returns: v.string(),
   handler: async (ctx, args) => {
-    const meme = await requireOwnedMeme(ctx, args.memeId, args.viewerId);
+    const viewerId = await getAuthUserId(ctx);
+    const meme = await requireOwnedMeme(ctx, args.memeId, viewerId);
     await ctx.db.patch(args.memeId, { status: "deleted" });
     return meme.mediaKey;
   },
