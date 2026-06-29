@@ -10,8 +10,12 @@
 
 import type * as auth from "../auth.js";
 import type * as http from "../http.js";
+import type * as media from "../media.js";
 import type * as memes from "../memes.js";
 import type * as r2 from "../r2.js";
+import type * as seed from "../seed.js";
+import type * as seedAssets from "../seedAssets.js";
+import type * as validators from "../validators.js";
 import type * as viewer from "../viewer.js";
 import type * as votes from "../votes.js";
 
@@ -24,8 +28,12 @@ import type {
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   http: typeof http;
+  media: typeof media;
   memes: typeof memes;
   r2: typeof r2;
+  seed: typeof seed;
+  seedAssets: typeof seedAssets;
+  validators: typeof validators;
   viewer: typeof viewer;
   votes: typeof votes;
 }>;
