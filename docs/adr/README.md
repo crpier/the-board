@@ -7,3 +7,4 @@ One file per decision. Numbered sequentially; supersede rather than rewrite past
 - [0003 - Custom Solid Client Integration for Convex Auth](0003-custom-solid-convex-auth-client.md)
 - [0004 - Voting Model and Per-Card Reactive Vote State](0004-voting-model-and-per-card-reactive-state.md)
 - [0005 - R2 Object Storage for Meme Media](0005-r2-object-storage-for-meme-media.md)
+- [0006 - Read-Time View-Model and Foreign-Key Resolution](0006-read-time-view-model-fk-resolution.md)

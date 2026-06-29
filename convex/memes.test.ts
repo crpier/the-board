@@ -77,8 +77,8 @@ describe("listPublicMemes view-model", () => {
     await seedMeme(t, { authorId: userId });
 
     const { page } = await t.query(api.memes.listPublicMemes, firstPage);
-    // Two memes seeded (default Tester + this one); the nameless author's is one.
-    expect(page.map((m) => m.authorName)).toContain("Anon");
+    expect(page).toHaveLength(1);
+    expect(page[0].authorName).toBe("Anon");
   });
 
   test("never leaks raw foreign keys to the client", async () => {

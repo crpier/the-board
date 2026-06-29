@@ -17,7 +17,7 @@ The resolved read shape a meme query returns to the client, never the raw
 `Doc<"memes">`. Foreign keys are resolved server-side: `authorId` becomes a live
 `authorName` read from `users.name` (so a profile rename shows everywhere with no
 backfill), and the stored R2 `mediaKey` becomes a CDN `mediaUrl`. Raw foreign
-keys never leave the query (extends ADR 0001).
+keys never leave the query (see ADR 0006).
 
 ## Tags
 
