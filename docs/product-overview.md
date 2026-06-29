@@ -49,7 +49,8 @@ The product should let guests browse public content immediately, let authenticat
 - Public meme browsing centers on a reverse-chronological feed.
 - A meme detail page exists as the canonical destination for an individual meme.
 - The feed links out to that detail page through each card's timestamp and title;
-  media, author, and tags are not the link target.
+  media and author are not the link target.
+- The nav has a plain link to the search page; search is open to everyone.
 - Anyone — signed in or not — can search public, ready memes by a query that
   matches a meme's title and its tags together, ranked by relevance.
 - Media type (image / GIF / video) refines an active search; it is not a
@@ -57,8 +58,9 @@ The product should let guests browse public content immediately, let authenticat
 - Search never reveals memes a viewer can't otherwise see: `private`,
   not-yet-`ready`, and deleted memes never appear — including an owner's own
   `private` memes.
-- Tags are a discovery tool: a meme's tags are searchable terms, and tags are
-  meant to be clickable to run a search for that tag.
+- Tags are a discovery tool: a meme's tags are searchable terms, and each tag on
+  a card is clickable, running a search (`/search?q=<tag>`) for that tag in the
+  feed, on the detail page, and within results alike.
 
 ### Interaction
 

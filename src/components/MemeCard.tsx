@@ -91,9 +91,16 @@ export function MemeCard(props: {
           <div class="flex flex-wrap gap-x-2 gap-y-1">
             <For each={props.meme.tags}>
               {(tag) => (
-                <span class="cursor-pointer text-xs text-[#5a5a6e] transition-colors hover:text-[#63e6be]">
+                // A tag is a search term: clicking it runs `/search?q=<tag>`.
+                // The card is shared, so this makes tags clickable in the feed,
+                // detail, and results at once; in results the URL `q` change
+                // just re-runs the search. Author stays inert (profiles deferred).
+                <A
+                  href={`/search?q=${encodeURIComponent(tag)}`}
+                  class="text-xs text-[#5a5a6e] transition-colors hover:text-[#63e6be]"
+                >
                   #{tag}
-                </span>
+                </A>
               )}
             </For>
           </div>
