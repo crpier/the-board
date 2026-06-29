@@ -45,6 +45,7 @@ export function MemeCard(props: {
   onDeleted?: (id: Id<"memes">) => void;
 }) {
   const [editing, setEditing] = createSignal(false);
+  const detailHref = () => `/meme/${props.meme._id}`;
 
   return (
     <article class="overflow-hidden rounded-2xl border border-white bg-gradient-to-b">
@@ -54,7 +55,7 @@ export function MemeCard(props: {
           <div class="px-4 pt-4 pb-2">
             <h2 class="font-display text-center text-lg font-bold text-white">
               <A
-                href={`/meme/${props.meme._id}`}
+                href={detailHref()}
                 class="transition-colors hover:text-[#63e6be]"
               >
                 {title()}
@@ -120,7 +121,7 @@ export function MemeCard(props: {
           <span class="ml-auto text-[11px] text-[#6a6a7e]">
             @{props.meme.authorName} &middot;{" "}
             <A
-              href={`/meme/${props.meme._id}`}
+              href={detailHref()}
               class="transition-colors hover:text-[#63e6be]"
             >
               {formatTimeAgo(props.meme._creationTime)}
