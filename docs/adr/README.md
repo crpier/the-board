@@ -10,3 +10,4 @@ One file per decision. Numbered sequentially; supersede rather than rewrite past
 - [0006 - Read-Time View-Model and Foreign-Key Resolution](0006-read-time-view-model-fk-resolution.md)
 - [0007 - Meme Publish Lifecycle and Server-Authoritative Validation](0007-meme-publish-lifecycle-and-validation.md)
 - [0008 - Shared Client/Server Media-Acceptance Rules](0008-shared-client-server-media-rules.md)
+- [0009 - Owner Edit and Soft-Delete with R2 Reclamation](0009-owner-edit-and-soft-delete.md)

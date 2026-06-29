@@ -106,10 +106,35 @@ describe("listPublicMemes view-model", () => {
     const t = convexTest(schema, modules);
     await seedMeme(t, { visibility: "private" });
     await seedMeme(t, { status: "processing" });
+    await seedMeme(t, { status: "deleted" });
     await seedMeme(t); // the only public + ready meme
 
     const { page } = await t.query(api.memes.listPublicMemes, firstPage);
     expect(page).toHaveLength(1);
+  });
+
+  test("flags isOwner for the authoring viewer only", async () => {
+    const t = convexTest(schema, modules);
+    const { userId } = await seedMeme(t);
+    const otherId = await t.run(async (ctx) =>
+      ctx.db.insert("users", { name: "Someone else" }),
+    );
+
+    const asAuthor = t.withIdentity({ subject: `${userId}|session` });
+    const asOther = t.withIdentity({ subject: `${otherId}|session` });
+
+    expect(
+      (await asAuthor.query(api.memes.listPublicMemes, firstPage)).page[0]
+        .isOwner,
+    ).toBe(true);
+    expect(
+      (await asOther.query(api.memes.listPublicMemes, firstPage)).page[0]
+        .isOwner,
+    ).toBe(false);
+    // Guests are never owners.
+    expect(
+      (await t.query(api.memes.listPublicMemes, firstPage)).page[0].isOwner,
+    ).toBe(false);
   });
 });
 
@@ -341,5 +366,190 @@ describe("createMeme", () => {
     // Auth is checked before any cleanup, so a signed-out attempt must not
     // delete the object a legitimate retry would reuse.
     expect(await objectExists(t, "memes/anon.png")).toBe(true);
+  });
+});
+
+describe("updateMeme", () => {
+  function getMeme(t: ReturnType<typeof convexTest>, memeId: Id<"memes">) {
+    return t.run(async (ctx) => ctx.db.get(memeId));
+  }
+
+  test("owner edits title, tags, and visibility; tags are canonicalized", async () => {
+    const t = convexTest(schema, modules);
+    const { userId, memeId } = await seedMeme(t, {
+      title: "Old",
+      tags: ["old"],
+      visibility: "public",
+    });
+    const asOwner = t.withIdentity({ subject: `${userId}|session` });
+
+    await asOwner.mutation(api.memes.updateMeme, {
+      memeId,
+      title: "New title",
+      tags: ["  Dank   Meme ", "dank meme", ""],
+      visibility: "private",
+    });
+
+    const meme = await getMeme(t, memeId);
+    expect(meme?.title).toBe("New title");
+    expect(meme?.tags).toEqual(["dank meme"]);
+    expect(meme?.visibility).toBe("private");
+  });
+
+  test("a blank title clears the stored title", async () => {
+    const t = convexTest(schema, modules);
+    const { userId, memeId } = await seedMeme(t, { title: "Has a title" });
+    const asOwner = t.withIdentity({ subject: `${userId}|session` });
+
+    await asOwner.mutation(api.memes.updateMeme, {
+      memeId,
+      title: "   ",
+      tags: [],
+      visibility: "public",
+    });
+
+    expect((await getMeme(t, memeId))?.title).toBeUndefined();
+  });
+
+  test("rejects a non-owner and leaves the meme unchanged", async () => {
+    const t = convexTest(schema, modules);
+    const { memeId } = await seedMeme(t, { title: "Mine" });
+    const intruderId = await t.run(async (ctx) =>
+      ctx.db.insert("users", { name: "Intruder" }),
+    );
+    const asIntruder = t.withIdentity({ subject: `${intruderId}|session` });
+
+    await expect(
+      asIntruder.mutation(api.memes.updateMeme, {
+        memeId,
+        title: "Hijacked",
+        tags: [],
+        visibility: "public",
+      }),
+    ).rejects.toThrow();
+
+    expect((await getMeme(t, memeId))?.title).toBe("Mine");
+  });
+
+  test("rejects an unauthenticated caller", async () => {
+    const t = convexTest(schema, modules);
+    const { memeId } = await seedMeme(t);
+
+    await expect(
+      t.mutation(api.memes.updateMeme, {
+        memeId,
+        tags: [],
+        visibility: "public",
+      }),
+    ).rejects.toThrow();
+  });
+
+  test("rejects editing an already-deleted meme", async () => {
+    const t = convexTest(schema, modules);
+    const { userId, memeId } = await seedMeme(t, { status: "deleted" });
+    const asOwner = t.withIdentity({ subject: `${userId}|session` });
+
+    await expect(
+      asOwner.mutation(api.memes.updateMeme, {
+        memeId,
+        tags: [],
+        visibility: "public",
+      }),
+    ).rejects.toThrow();
+  });
+});
+
+describe("deleteMeme", () => {
+  /**
+   * Stand up an instance with the R2 component mounted (and the action-retrier
+   * registered where the component expects it, as in `createMeme`), seed a user
+   * and a ready meme, plus the R2 object the meme points at so `deleteObject`
+   * has something to reclaim.
+   */
+  async function setup(key = "memes/del.png") {
+    const t = convexTest(schema, modules);
+    r2Test.register(t);
+    actionRetrier.register(t, "r2/actionRetrier");
+
+    const { userId, memeId } = await seedMeme(t, { mediaKey: key });
+    await t.run(async (ctx) => {
+      await ctx.runMutation(components.r2.lib.upsertMetadata, {
+        key,
+        bucket: "test-bucket",
+        contentType: "image/png",
+        size: MB,
+        lastModified: new Date().toISOString(),
+        link: `https://dash.example/objects/${key}/details`,
+      });
+    });
+
+    return {
+      t,
+      userId,
+      memeId,
+      key,
+      asOwner: t.withIdentity({ subject: `${userId}|session` }),
+    };
+  }
+
+  function getMeme(t: ReturnType<typeof convexTest>, memeId: Id<"memes">) {
+    return t.run(async (ctx) => ctx.db.get(memeId));
+  }
+
+  function objectExists(t: ReturnType<typeof convexTest>, key: string) {
+    return t.run(async (ctx) => {
+      const metadata = await ctx.runQuery(components.r2.lib.getMetadata, {
+        key,
+        bucket: "test-bucket",
+        endpoint: process.env.R2_ENDPOINT!,
+        accessKeyId: process.env.R2_ACCESS_KEY_ID!,
+        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
+      });
+      return metadata !== null;
+    });
+  }
+
+  test("owner delete tombstones the meme, reclaims the object, keeps votes", async () => {
+    const { t, userId, memeId, key, asOwner } = await setup();
+    // A vote that must survive the delete (tombstone leaves rows in place).
+    await t.run(async (ctx) => {
+      await ctx.db.insert("votes", { userId, memeId, value: "up" });
+    });
+
+    await asOwner.action(api.memes.deleteMeme, { memeId });
+
+    expect((await getMeme(t, memeId))?.status).toBe("deleted");
+    expect(await objectExists(t, key)).toBe(false);
+    const votes = await t.run(async (ctx) =>
+      ctx.db
+        .query("votes")
+        .withIndex("by_meme", (q) => q.eq("memeId", memeId))
+        .collect(),
+    );
+    expect(votes).toHaveLength(1);
+  });
+
+  test("rejects a non-owner, leaving the meme and object intact", async () => {
+    const { t, memeId, key } = await setup();
+    const intruderId = await t.run(async (ctx) =>
+      ctx.db.insert("users", { name: "Intruder" }),
+    );
+    const asIntruder = t.withIdentity({ subject: `${intruderId}|session` });
+
+    await expect(
+      asIntruder.action(api.memes.deleteMeme, { memeId }),
+    ).rejects.toThrow();
+
+    expect((await getMeme(t, memeId))?.status).toBe("ready");
+    expect(await objectExists(t, key)).toBe(true);
+  });
+
+  test("rejects an unauthenticated caller, leaving the meme and object intact", async () => {
+    const { t, memeId, key } = await setup();
+
+    await expect(t.action(api.memes.deleteMeme, { memeId })).rejects.toThrow();
+
+    expect((await getMeme(t, memeId))?.status).toBe("ready");
+    expect(await objectExists(t, key)).toBe(true);
   });
 });

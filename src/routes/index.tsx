@@ -95,7 +95,16 @@ export default function Home() {
             when={(items().length ?? 0) > 0}
             fallback={<p class="text-[#5a5a6e]">No memes for you</p>}
           >
-            <For each={items()}>{(meme) => <MemeCard meme={meme} />}</For>
+            <For each={items()}>
+              {(meme) => (
+                <MemeCard
+                  meme={meme}
+                  onDeleted={(id) =>
+                    setItems((current) => current.filter((m) => m._id !== id))
+                  }
+                />
+              )}
+            </For>
           </Show>
           <Show when={isLoadingMore()}>
             <p class="py-4 text-center text-sm text-[#5a5a6e]">

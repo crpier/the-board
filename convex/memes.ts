@@ -8,6 +8,7 @@ import {
   type QueryCtx,
   action,
   internalMutation,
+  mutation,
   query,
 } from "./_generated/server";
 import { MEDIA_LIMITS, MEGABYTE, classifyMedia } from "./media";
@@ -29,7 +30,15 @@ const feedMemeValidator = v.object({
   mediaUrl: v.string(),
   mediaType: mediaTypeValidator,
   tags: v.array(v.string()),
+  // Editable metadata the owner's edit form prefills from. Always "public" in
+  // the public feed (which filters on it), but carried so the same view-model
+  // serves owner-facing surfaces without a second read.
+  visibility: visibilityValidator,
   authorName: v.string(),
+  // True when the requesting viewer authored this meme. Computed server-side
+  // from `authorId === getAuthUserId` so the raw `authorId` never leaves the
+  // query (ADR 0006) while the client can still gate owner-only controls.
+  isOwner: v.boolean(),
   upvoteCount: v.number(),
   downvoteCount: v.number(),
 });
@@ -40,10 +49,15 @@ export type FeedMeme = Infer<typeof feedMemeValidator>;
  * Resolve a stored meme into its feed view-model. The author's display name is
  * read live from `users.name` (falling back to "Anon", as elsewhere) rather than
  * denormalized, so a profile rename is reflected everywhere immediately.
+ *
+ * `viewerId` is the authenticated viewer (or `null` for guests), resolved once
+ * by the caller so ownership can be flagged without re-deriving the identity per
+ * meme.
  */
 async function toFeedMeme(
   ctx: QueryCtx,
   meme: Doc<"memes">,
+  viewerId: Id<"users"> | null,
 ): Promise<FeedMeme> {
   const author = await ctx.db.get(meme.authorId);
   return {
@@ -53,7 +67,9 @@ async function toFeedMeme(
     mediaUrl: resolveUrl(meme.mediaKey),
     mediaType: meme.mediaType,
     tags: meme.tags,
+    visibility: meme.visibility,
     authorName: author?.name ?? "Anon",
+    isOwner: viewerId !== null && meme.authorId === viewerId,
     upvoteCount: meme.upvoteCount,
     downvoteCount: meme.downvoteCount,
   };
@@ -78,6 +94,7 @@ export const listPublicMemes = query({
     ),
   }),
   handler: async (ctx, args) => {
+    const viewerId = await getAuthUserId(ctx);
     const result = await ctx.db
       .query("memes")
       .withIndex("by_visibility_and_status", (q) =>
@@ -88,7 +105,9 @@ export const listPublicMemes = query({
 
     return {
       ...result,
-      page: await Promise.all(result.page.map((meme) => toFeedMeme(ctx, meme))),
+      page: await Promise.all(
+        result.page.map((meme) => toFeedMeme(ctx, meme, viewerId)),
+      ),
     };
   },
 });
@@ -247,5 +266,107 @@ export const finalizeProcessing = internalMutation({
     }
     await ctx.db.patch(args.memeId, { status: "ready" });
     return null;
+  },
+});
+
+/**
+ * Load a meme and assert the caller owns it, throwing the same opaque "not
+ * found" for a missing, already-deleted, or someone-else's meme so the edit and
+ * delete paths share one authorization gate and don't reveal a meme's existence
+ * to a non-owner. Authorization keys off `authorId === getAuthUserId` (#31).
+ */
+async function requireOwnedMeme(
+  ctx: QueryCtx,
+  memeId: Id<"memes">,
+  viewerId: Id<"users"> | null,
+): Promise<Doc<"memes">> {
+  if (viewerId === null) {
+    throw new Error("You must be signed in to manage a meme.");
+  }
+  const meme = await ctx.db.get(memeId);
+  // A tombstoned meme is treated as gone: no further edits or re-deletes.
+  if (meme === null || meme.status === "deleted") {
+    throw new Error("Meme not found.");
+  }
+  if (meme.authorId !== viewerId) {
+    throw new Error("You can only manage your own memes.");
+  }
+  return meme;
+}
+
+/**
+ * Owner-only edit of a meme's metadata: `title`, `tags`, and `visibility`. The
+ * media item itself is immutable here — there is no swap (#31). Tags run through
+ * the same `canonicalizeTags` path as `createMeme`, so edited and freshly
+ * published tags normalize identically.
+ *
+ * `title` is trimmed server-side: an omitted or blank value clears the title
+ * (patching it to `undefined` removes the field) rather than storing an empty
+ * string, matching what the publish form sends.
+ */
+export const updateMeme = mutation({
+  args: {
+    memeId: v.id("memes"),
+    title: v.optional(v.string()),
+    tags: v.array(v.string()),
+    visibility: visibilityValidator,
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const viewerId = await getAuthUserId(ctx);
+    await requireOwnedMeme(ctx, args.memeId, viewerId);
+
+    const title = args.title?.trim();
+    await ctx.db.patch(args.memeId, {
+      title: title ? title : undefined,
+      tags: canonicalizeTags(args.tags),
+      visibility: args.visibility,
+    });
+    return null;
+  },
+});
+
+/**
+ * Owner-only delete of a meme. This is an **action** for the same reason
+ * `createMeme` is: it commits a database change and then reclaims the R2 object,
+ * and an action runs the object delete as its own committed step.
+ *
+ * Delete is a soft tombstone: the meme is flipped to `status = "deleted"` (which
+ * hides it everywhere, already guarded by the public read filters) and its R2
+ * bytes are reclaimed. Vote rows are left in place. Ordering matters — the
+ * tombstone commits first, so a failed object delete leaves an orphaned object
+ * (reclaimable later) rather than a still-visible meme. There is no restore UI;
+ * a delayed-reclaim undo window is future work.
+ */
+export const deleteMeme = action({
+  args: { memeId: v.id("memes") },
+  returns: v.null(),
+  handler: async (ctx, args): Promise<null> => {
+    // The tombstone (with its auth + ownership check) commits before we touch
+    // R2, so the meme is hidden even if the object delete later fails.
+    const mediaKey: string = await ctx.runMutation(
+      internal.memes.tombstoneMeme,
+      { memeId: args.memeId },
+    );
+    await r2.deleteObject(ctx, mediaKey);
+    return null;
+  },
+});
+
+/**
+ * Tombstone a meme and return its R2 key for reclamation. Internal-only. The
+ * viewer is derived server-side from the auth context (which propagates through
+ * `ctx.runMutation` from `deleteMeme`), never accepted as an argument. The
+ * ownership gate lives here, inside the transaction, so the status flip and the
+ * authorization check can't race.
+ */
+export const tombstoneMeme = internalMutation({
+  args: { memeId: v.id("memes") },
+  returns: v.string(),
+  handler: async (ctx, args) => {
+    const viewerId = await getAuthUserId(ctx);
+    const meme = await requireOwnedMeme(ctx, args.memeId, viewerId);
+    await ctx.db.patch(args.memeId, { status: "deleted" });
+    return meme.mediaKey;
   },
 });
