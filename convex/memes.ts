@@ -10,10 +10,9 @@ import {
   internalMutation,
   query,
 } from "./_generated/server";
+import { MEDIA_LIMITS, MEGABYTE, classifyMedia } from "./media";
 import { r2, resolveUrl } from "./r2";
 import { mediaTypeValidator, visibilityValidator } from "./validators";
-
-type MediaType = Infer<typeof mediaTypeValidator>;
 
 /**
  * A feed-ready meme: every foreign key resolved so the client renders straight
@@ -93,33 +92,6 @@ export const listPublicMemes = query({
     };
   },
 });
-
-/**
- * Server-authoritative media thresholds (`docs/product-overview.md`). A meme's
- * `mediaType` is never taken from the client — it is derived from the real R2
- * object content-type below — and the matching byte ceiling is re-checked here
- * even though the upload UI also validates, because the UI is untrusted.
- */
-const MEGABYTE = 1024 * 1024;
-const MEDIA_LIMITS: Record<MediaType, number> = {
-  image: 10 * MEGABYTE,
-  gif: 25 * MEGABYTE,
-  video: 100 * MEGABYTE,
-};
-
-/**
- * Map a real R2 content-type onto a meme `mediaType`, or `null` when the type is
- * not something we accept. GIFs arrive as `image/gif`, so they must be matched
- * before the generic `image/` prefix or every GIF would be classed as an image
- * and validated against the wrong (smaller) ceiling.
- */
-function classifyMedia(contentType: string): MediaType | null {
-  const type = contentType.toLowerCase();
-  if (type === "image/gif") return "gif";
-  if (type.startsWith("image/")) return "image";
-  if (type.startsWith("video/")) return "video";
-  return null;
-}
 
 /**
  * Canonicalize user-supplied tags (`docs/glossary.md#tags`): trim, lowercase,

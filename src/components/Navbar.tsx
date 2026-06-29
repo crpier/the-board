@@ -26,6 +26,12 @@ export default function Navbar() {
               <button onClick={() => void auth.signIn()}>Sign in</button>
             }
           >
+            <a
+              href="/upload"
+              class="rounded-xl border border-[#63e6be]/30 bg-[#63e6be]/10 px-3 py-1.5 text-sm font-bold text-[#63e6be]"
+            >
+              Upload
+            </a>
             <Show when={viewer.data()}>
               {(user) => (
                 <div class="flex items-center gap-2">
