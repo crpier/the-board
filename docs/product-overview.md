@@ -72,6 +72,11 @@ The product should let guests browse public content immediately, let authenticat
 - Lifecycle status controls whether a meme is draft, processing, ready, failed, or deleted.
 - Public browsing only shows memes that are both public and ready.
 - Hidden memes should appear as not found on public routes.
+- The meme detail page is governed by the same rules: anyone can open a public,
+  ready meme, an owner can additionally open their own ready meme when it is
+  private, and every other case (deleted, not-yet-ready, hidden, someone else's
+  private meme, or an unknown id) is an identical not-found that never reveals
+  whether the meme exists. Admins get no special detail access here.
 - Admin moderation stays simple at the product surface: admins change a meme's visibility.
 - AI moderation may run after publish and hide content until an admin restores it.
 

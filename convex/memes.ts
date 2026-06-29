@@ -113,6 +113,55 @@ export const listPublicMemes = query({
 });
 
 /**
+ * Read-time query backing the meme detail page at `/meme/:id` (#42). Returns the
+ * same `FeedMeme` view-model as the feed (via `toFeedMeme`) so the detail page
+ * reuses `MemeCard` wholesale, or `null` when the meme is not visible to the
+ * caller.
+ *
+ * The id arrives as `v.string()` (a raw URL param), not `v.id`, so a malformed
+ * param is normalized to `null` here rather than throwing an argument-validation
+ * error: `normalizeId` returns `null` for anything that isn't a valid id for this
+ * table.
+ *
+ * Authorization matrix (no admin special-casing — that's deferred to
+ * Moderation):
+ *   - Only `ready` memes are ever visible; `deleted` and every non-`ready`
+ *     status resolve to `null` for everyone.
+ *   - A `public` ready meme is visible to everyone (guest, non-owner, owner).
+ *   - A `private` ready meme is visible only to its owner — this slice's new
+ *     capability, since private memes appear nowhere in the feed.
+ *
+ * Every hidden case returns the *same* opaque `null` (bad id, deleted, hidden,
+ * not-yours-private) so the query never reveals whether an id exists, mirroring
+ * `requireOwnedMeme`.
+ */
+export const getMeme = query({
+  args: { id: v.string() },
+  returns: v.union(feedMemeValidator, v.null()),
+  handler: async (ctx, args) => {
+    const memeId = ctx.db.normalizeId("memes", args.id);
+    if (memeId === null) {
+      return null;
+    }
+
+    const meme = await ctx.db.get(memeId);
+    // Tombstoned and not-yet-`ready` memes are gone/unviewable for everyone.
+    if (meme === null || meme.status !== "ready") {
+      return null;
+    }
+
+    const viewerId = await getAuthUserId(ctx);
+    const isOwner = viewerId !== null && meme.authorId === viewerId;
+    // A private meme is owner-only; public ready memes are open to all.
+    if (meme.visibility !== "public" && !isOwner) {
+      return null;
+    }
+
+    return await toFeedMeme(ctx, meme, viewerId);
+  },
+});
+
+/**
  * Canonicalize user-supplied tags (`docs/glossary.md#tags`): trim, lowercase,
  * collapse internal whitespace, drop empties, and de-duplicate while preserving
  * first-seen order so the same idea always maps to one reusable tag.
