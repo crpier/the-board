@@ -37,6 +37,26 @@ maps to a single tag and tags are reusable across memes. Stored as a string arra
 on the meme for now; a shared tag table (clickable tag pages, autocomplete) is
 deferred to the discovery work.
 
+## searchText (search blob)
+
+The denormalized, internal full-text field on a meme: its title plus its
+canonicalized tags joined by spaces. **The author is excluded** — `authorName`
+is resolved live (see _Feed meme_) and folding it in would reintroduce rename
+staleness. Recomputed on every write that touches title/tags via a shared
+`buildSearchText` helper, so search always reflects current metadata. It is the
+`searchField` of the one search index and never enters the view-model returned
+to clients (see ADR 0010).
+
+## Relevance search
+
+The single discovery query (`searchMemes`): one Convex search index ranks
+`public` + `ready` memes by how well their `searchText` matches the query, for
+every viewer alike. There is no recency/browse query path — a query always
+carries text, and media type is an optional refinement, not a standalone browse
+axis. Empty/whitespace text yields an empty page. Tag matching is therefore
+relevance-ordered and prefix-fuzzy, not chronological or strict-equality
+faceting (see ADR 0010).
+
 ## Vote
 
 A user's single active stance on a meme: an upvote or a downvote. A user holds at

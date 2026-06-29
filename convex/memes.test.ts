@@ -4,7 +4,7 @@ import r2Test from "@convex-dev/r2/test";
 import { convexTest } from "convex-test";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
-import { api, components } from "./_generated/api";
+import { api, components, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import schema from "./schema";
 
@@ -262,6 +262,302 @@ describe("getMeme authorization matrix", () => {
     await t.run(async (ctx) => ctx.db.delete(memeId));
 
     expect(await t.query(api.memes.getMeme, { id: memeId })).toBeNull();
+  });
+});
+
+describe("searchMemes", () => {
+  const prev = process.env.R2_PUBLIC_URL;
+
+  beforeEach(() => {
+    process.env.R2_PUBLIC_URL = "https://media.example.com";
+  });
+
+  afterEach(() => {
+    process.env.R2_PUBLIC_URL = prev;
+  });
+
+  /**
+   * Seed a meme with its `searchText` populated the way a real write would, so
+   * findability tests exercise the `searchMemes` query directly. Defaults to a
+   * public + ready image titled "Spaceship" tagged "funny" — title and tag use
+   * distinct words so the title-term and tag-term cases are unambiguous.
+   */
+  async function seedSearchable(
+    t: ReturnType<typeof convexTest>,
+    overrides: Record<string, unknown> = {},
+  ) {
+    const userId =
+      (overrides.authorId as Id<"users"> | undefined) ??
+      (await t.run(async (ctx) => ctx.db.insert("users", { name: "Tester" })));
+
+    const doc = {
+      title: "Spaceship",
+      visibility: "public",
+      status: "ready",
+      mediaKey: "memes/abc.png",
+      mediaType: "image",
+      tags: ["funny"],
+      authorId: userId,
+      upvoteCount: 0,
+      downvoteCount: 0,
+      ...overrides,
+    } as Record<string, unknown>;
+
+    const memeId = await t.run(async (ctx) =>
+      ctx.db.insert("memes", {
+        ...doc,
+        searchText: [doc.title, ...(doc.tags as string[])].join(" "),
+      } as never),
+    );
+
+    return { userId, memeId };
+  }
+
+  function search(
+    t: ReturnType<typeof convexTest>,
+    query: string,
+    mediaType?: "image" | "gif" | "video",
+  ) {
+    return t.query(api.memes.searchMemes, {
+      query,
+      mediaType,
+      paginationOpts: { numItems: 10, cursor: null },
+    });
+  }
+
+  test("finds a public, ready meme by a title term", async () => {
+    const t = convexTest(schema, modules);
+    const { memeId } = await seedSearchable(t);
+
+    const { page } = await search(t, "spaceship");
+    expect(page).toHaveLength(1);
+    expect(page[0]._id).toBe(memeId);
+  });
+
+  test("finds a public, ready meme by a tag term", async () => {
+    const t = convexTest(schema, modules);
+    const { memeId } = await seedSearchable(t);
+
+    const { page } = await search(t, "funny");
+    expect(page).toHaveLength(1);
+    expect(page[0]._id).toBe(memeId);
+  });
+
+  test("returns the same FeedMeme view-model as the feed", async () => {
+    const t = convexTest(schema, modules);
+    await seedSearchable(t);
+
+    const { page } = await search(t, "spaceship");
+    expect(page[0].authorName).toBe("Tester");
+    expect(page[0].mediaUrl).toBe("https://media.example.com/memes/abc.png");
+    // No raw FKs leak (ADR 0006); searchText is internal plumbing, not exposed.
+    expect(page[0]).not.toHaveProperty("authorId");
+    expect(page[0]).not.toHaveProperty("mediaKey");
+    expect(page[0]).not.toHaveProperty("searchText");
+    expect(page[0]).not.toHaveProperty("status");
+  });
+
+  test("excludes a private meme even when the text matches", async () => {
+    const t = convexTest(schema, modules);
+    await seedSearchable(t, { visibility: "private" });
+
+    expect((await search(t, "spaceship")).page).toHaveLength(0);
+  });
+
+  test("excludes an owner's own private meme, even for that owner", async () => {
+    const t = convexTest(schema, modules);
+    const { userId } = await seedSearchable(t, { visibility: "private" });
+    const asOwner = t.withIdentity({ subject: `${userId}|session` });
+
+    // The static public+ready filter applies to every viewer, including the
+    // owner — private stays private even to its author in this discovery seam.
+    expect((await search(asOwner, "spaceship")).page).toHaveLength(0);
+  });
+
+  test.each(["draft", "processing", "failed", "deleted"] as const)(
+    "excludes a %s meme even when the text matches",
+    async (status) => {
+      const t = convexTest(schema, modules);
+      await seedSearchable(t, { status });
+
+      expect((await search(t, "spaceship")).page).toHaveLength(0);
+    },
+  );
+
+  test("mediaType filter narrows results to the chosen type", async () => {
+    const t = convexTest(schema, modules);
+    // Two ready public memes sharing a term, differing only by media type.
+    await seedSearchable(t, {
+      title: "Spaceship photo",
+      mediaType: "image",
+      mediaKey: "memes/pic.png",
+    });
+    await seedSearchable(t, {
+      title: "Spaceship clip",
+      mediaType: "video",
+      mediaKey: "memes/clip.mp4",
+    });
+
+    expect((await search(t, "spaceship")).page).toHaveLength(2);
+    const videos = await search(t, "spaceship", "video");
+    expect(videos.page).toHaveLength(1);
+    expect(videos.page[0].mediaType).toBe("video");
+  });
+
+  test("an empty query returns an empty page without throwing", async () => {
+    const t = convexTest(schema, modules);
+    await seedSearchable(t);
+
+    const result = await search(t, "");
+    expect(result.page).toHaveLength(0);
+    expect(result.isDone).toBe(true);
+  });
+
+  test("a whitespace-only query returns an empty page without throwing", async () => {
+    const t = convexTest(schema, modules);
+    await seedSearchable(t);
+
+    expect((await search(t, "   ")).page).toHaveLength(0);
+  });
+
+  test("a freshly published meme is searchable by its title and tags", async () => {
+    const t = convexTest(schema, modules);
+    const userId = await t.run(async (ctx) =>
+      ctx.db.insert("users", { name: "Publisher" }),
+    );
+
+    // Publish through the real create-lifecycle insert (the seam `createMeme`
+    // and the seed both go through), then let the processing → ready flip run.
+    const memeId = await t.mutation(internal.memes.insertProcessingMeme, {
+      authorId: userId,
+      mediaKey: "memes/quokka.png",
+      mediaType: "image",
+      title: "Quokka selfie",
+      tags: ["wholesome"],
+      visibility: "public",
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await t.finishInProgressScheduledFunctions();
+
+    expect((await search(t, "quokka")).page.map((m) => m._id)).toContain(
+      memeId,
+    );
+    expect((await search(t, "wholesome")).page.map((m) => m._id)).toContain(
+      memeId,
+    );
+  });
+
+  test("an edited meme is searchable by its new title/tags, not its old ones", async () => {
+    const t = convexTest(schema, modules);
+    // `seedMeme` inserts a raw row with no `searchText`, so it predates the
+    // field and is invisible to search until a write recomputes it.
+    const { userId, memeId } = await seedMeme(t, {
+      title: "Stale",
+      tags: ["outdated"],
+    });
+    // Predates the field: no `searchText` yet. (A search can't be run while an
+    // unindexed row is present — convex-test 0.0.54 throws on the missing field
+    // where real Convex would skip the doc — so assert the raw state directly.)
+    expect(
+      (await t.run((ctx) => ctx.db.get(memeId)))?.searchText,
+    ).toBeUndefined();
+
+    const asOwner = t.withIdentity({ subject: `${userId}|session` });
+    await asOwner.mutation(api.memes.updateMeme, {
+      memeId,
+      title: "Renamed glory",
+      tags: ["fresh"],
+      visibility: "public",
+    });
+
+    expect((await search(t, "renamed")).page.map((m) => m._id)).toContain(
+      memeId,
+    );
+    expect((await search(t, "fresh")).page.map((m) => m._id)).toContain(memeId);
+    // The pre-edit terms were never indexed, so they still find nothing.
+    expect((await search(t, "stale")).page).toHaveLength(0);
+    expect((await search(t, "outdated")).page).toHaveLength(0);
+  });
+});
+
+describe("backfillSearchText", () => {
+  const prev = process.env.R2_PUBLIC_URL;
+
+  beforeEach(() => {
+    process.env.R2_PUBLIC_URL = "https://media.example.com";
+  });
+
+  afterEach(() => {
+    process.env.R2_PUBLIC_URL = prev;
+  });
+
+  function search(t: ReturnType<typeof convexTest>, query: string) {
+    return t.query(api.memes.searchMemes, {
+      query,
+      paginationOpts: { numItems: 50, cursor: null },
+    });
+  }
+
+  function backfill(t: ReturnType<typeof convexTest>) {
+    return t.mutation(internal.memes.backfillSearchText, {
+      paginationOpts: { numItems: 100, cursor: null },
+    });
+  }
+
+  test("makes a pre-existing row findable and is idempotent on re-run", async () => {
+    const t = convexTest(schema, modules);
+    // A row written before `searchText` existed: no field, invisible to search.
+    const { memeId } = await seedMeme(t, {
+      title: "Ancient relic",
+      tags: ["history"],
+    });
+    // No `searchText` yet — invisible to search until the backfill writes it.
+    // (Asserted via `db.get` rather than a search, which convex-test 0.0.54
+    // can't run while an unindexed row is present; real Convex skips the doc.)
+    expect(
+      (await t.run((ctx) => ctx.db.get(memeId)))?.searchText,
+    ).toBeUndefined();
+
+    const first = await backfill(t);
+    expect(first.isDone).toBe(true);
+    expect(first.patched).toBe(1);
+
+    // Now findable by both its title and its tag term.
+    expect((await search(t, "ancient")).page.map((m) => m._id)).toContain(
+      memeId,
+    );
+    expect((await search(t, "history")).page.map((m) => m._id)).toContain(
+      memeId,
+    );
+
+    // Re-running touches nothing (already populated) and leaves it findable.
+    const second = await backfill(t);
+    expect(second.patched).toBe(0);
+    expect((await search(t, "ancient")).page).toHaveLength(1);
+  });
+
+  test("only backfills rows missing searchText, skipping already-written ones", async () => {
+    const t = convexTest(schema, modules);
+    // Two legacy rows missing the field, plus one already written normally.
+    await seedMeme(t, { title: "Legacy one", tags: [] });
+    await seedMeme(t, { title: "Legacy two", tags: [] });
+    const userId = await t.run(async (ctx) =>
+      ctx.db.insert("users", { name: "Modern" }),
+    );
+    await t.mutation(internal.memes.insertProcessingMeme, {
+      authorId: userId,
+      mediaKey: "memes/modern.png",
+      mediaType: "image",
+      title: "Modern entry",
+      tags: [],
+      visibility: "public",
+    });
+
+    const result = await backfill(t);
+    // The modern row already carried `searchText`, so only the two legacy rows
+    // are patched.
+    expect(result.patched).toBe(2);
+    expect(result.scanned).toBe(3);
   });
 });
 
