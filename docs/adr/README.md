@@ -9,3 +9,4 @@ One file per decision. Numbered sequentially; supersede rather than rewrite past
 - [0005 - R2 Object Storage for Meme Media](0005-r2-object-storage-for-meme-media.md)
 - [0006 - Read-Time View-Model and Foreign-Key Resolution](0006-read-time-view-model-fk-resolution.md)
 - [0007 - Meme Publish Lifecycle and Server-Authoritative Validation](0007-meme-publish-lifecycle-and-validation.md)
+- [0008 - Shared Client/Server Media-Acceptance Rules](0008-shared-client-server-media-rules.md)
