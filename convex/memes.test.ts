@@ -138,6 +138,133 @@ describe("listPublicMemes view-model", () => {
   });
 });
 
+describe("getMeme authorization matrix", () => {
+  const prev = process.env.R2_PUBLIC_URL;
+
+  beforeEach(() => {
+    process.env.R2_PUBLIC_URL = "https://media.example.com";
+  });
+
+  afterEach(() => {
+    process.env.R2_PUBLIC_URL = prev;
+  });
+
+  /** A second user, distinct from the meme's author. */
+  function seedOtherUser(t: ReturnType<typeof convexTest>) {
+    return t.run(async (ctx) =>
+      ctx.db.insert("users", { name: "Someone else" }),
+    );
+  }
+
+  test("returns the FeedMeme view-model for a public + ready meme", async () => {
+    const t = convexTest(schema, modules);
+    const { memeId } = await seedMeme(t);
+
+    const meme = await t.query(api.memes.getMeme, { id: memeId });
+
+    expect(meme).not.toBeNull();
+    expect(meme?._id).toBe(memeId);
+    expect(meme?.authorName).toBe("Tester");
+    expect(meme?.mediaUrl).toBe("https://media.example.com/memes/abc.png");
+    // Never leaks raw foreign keys to the client (ADR 0006).
+    expect(meme).not.toHaveProperty("authorId");
+    expect(meme).not.toHaveProperty("mediaKey");
+    // No status in the view-model — it stays a read-time gate, not a field.
+    expect(meme).not.toHaveProperty("status");
+  });
+
+  test("a guest sees a public + ready meme but isOwner is false", async () => {
+    const t = convexTest(schema, modules);
+    const { memeId } = await seedMeme(t);
+
+    const meme = await t.query(api.memes.getMeme, { id: memeId });
+    expect(meme).not.toBeNull();
+    expect(meme?.isOwner).toBe(false);
+  });
+
+  test("a guest cannot see a private meme", async () => {
+    const t = convexTest(schema, modules);
+    const { memeId } = await seedMeme(t, { visibility: "private" });
+
+    expect(await t.query(api.memes.getMeme, { id: memeId })).toBeNull();
+  });
+
+  test("a non-owner cannot see a private meme", async () => {
+    const t = convexTest(schema, modules);
+    const { memeId } = await seedMeme(t, { visibility: "private" });
+    const otherId = await seedOtherUser(t);
+    const asOther = t.withIdentity({ subject: `${otherId}|session` });
+
+    expect(await asOther.query(api.memes.getMeme, { id: memeId })).toBeNull();
+  });
+
+  test("a non-owner sees a public + ready meme without ownership", async () => {
+    const t = convexTest(schema, modules);
+    const { memeId } = await seedMeme(t);
+    const otherId = await seedOtherUser(t);
+    const asOther = t.withIdentity({ subject: `${otherId}|session` });
+
+    const meme = await asOther.query(api.memes.getMeme, { id: memeId });
+    expect(meme).not.toBeNull();
+    expect(meme?.isOwner).toBe(false);
+  });
+
+  test("the owner sees their own public + ready meme with isOwner true", async () => {
+    const t = convexTest(schema, modules);
+    const { userId, memeId } = await seedMeme(t);
+    const asOwner = t.withIdentity({ subject: `${userId}|session` });
+
+    const meme = await asOwner.query(api.memes.getMeme, { id: memeId });
+    expect(meme).not.toBeNull();
+    expect(meme?.isOwner).toBe(true);
+  });
+
+  test("the owner sees their own private + ready meme with isOwner true", async () => {
+    const t = convexTest(schema, modules);
+    const { userId, memeId } = await seedMeme(t, { visibility: "private" });
+    const asOwner = t.withIdentity({ subject: `${userId}|session` });
+
+    const meme = await asOwner.query(api.memes.getMeme, { id: memeId });
+    expect(meme).not.toBeNull();
+    expect(meme?.visibility).toBe("private");
+    expect(meme?.isOwner).toBe(true);
+  });
+
+  test("a deleted meme is not found, even for its owner", async () => {
+    const t = convexTest(schema, modules);
+    const { userId, memeId } = await seedMeme(t, { status: "deleted" });
+    const asOwner = t.withIdentity({ subject: `${userId}|session` });
+
+    expect(await t.query(api.memes.getMeme, { id: memeId })).toBeNull();
+    expect(await asOwner.query(api.memes.getMeme, { id: memeId })).toBeNull();
+  });
+
+  test("a non-ready (processing) meme is not found, even for its owner", async () => {
+    const t = convexTest(schema, modules);
+    const { userId, memeId } = await seedMeme(t, { status: "processing" });
+    const asOwner = t.withIdentity({ subject: `${userId}|session` });
+
+    expect(await t.query(api.memes.getMeme, { id: memeId })).toBeNull();
+    expect(await asOwner.query(api.memes.getMeme, { id: memeId })).toBeNull();
+  });
+
+  test("a malformed id returns null instead of throwing", async () => {
+    const t = convexTest(schema, modules);
+
+    expect(await t.query(api.memes.getMeme, { id: "not-an-id" })).toBeNull();
+  });
+
+  test("a well-formed memes id with no document returns null", async () => {
+    const t = convexTest(schema, modules);
+    // A real memes id whose row we then delete: well-formed for the table, so it
+    // survives `normalizeId`, but `ctx.db.get` finds nothing behind it.
+    const { memeId } = await seedMeme(t);
+    await t.run(async (ctx) => ctx.db.delete(memeId));
+
+    expect(await t.query(api.memes.getMeme, { id: memeId })).toBeNull();
+  });
+});
+
 const MB = 1024 * 1024;
 
 describe("createMeme", () => {
