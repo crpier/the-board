@@ -1,4 +1,5 @@
 import { api } from "@convex/_generated/api";
+import { ACCEPTED_FILE_TYPES } from "@convex/media";
 import { Title } from "@solidjs/meta";
 import { Show, createSignal, onCleanup } from "solid-js";
 import { useConvexAuth } from "~/lib/convex-auth-solid";
@@ -198,7 +199,7 @@ function UploadForm() {
           <input
             id="meme-file"
             type="file"
-            accept="image/*,video/*"
+            accept={ACCEPTED_FILE_TYPES}
             class="sr-only"
             disabled={phase() === "uploading"}
             onChange={(e) => onPick(e.currentTarget.files?.[0])}

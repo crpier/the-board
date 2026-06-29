@@ -40,3 +40,11 @@ export function classifyMedia(contentType: string): MediaType | null {
   if (type.startsWith("video/")) return "video";
   return null;
 }
+
+/**
+ * `accept` value for the upload file picker. A coarse hint to the OS dialog, not
+ * a trust boundary — `classifyMedia` is the precise gate and the server re-checks
+ * regardless. Lives here so the picker can't advertise types the validator would
+ * reject (ADR 0008). `image/*` already covers `image/gif`.
+ */
+export const ACCEPTED_FILE_TYPES = "image/*,video/*";
