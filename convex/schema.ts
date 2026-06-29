@@ -3,6 +3,8 @@ import { authTables } from "@convex-dev/auth/server";
 
 import { v } from "convex/values";
 
+import { mediaTypeValidator, visibilityValidator } from "./validators";
+
 export default defineSchema({
   ...authTables,
   users: defineTable({
@@ -20,7 +22,7 @@ export default defineSchema({
     .index("phone", ["phone"]),
   memes: defineTable({
     title: v.optional(v.string()),
-    visibility: v.union(v.literal("public"), v.literal("private")),
+    visibility: visibilityValidator,
     status: v.union(
       v.literal("draft"),
       v.literal("processing"),
@@ -31,11 +33,7 @@ export default defineSchema({
     // R2 object key for the primary media item; resolved to a CDN URL at read
     // time (ADR 0005). Raw keys never leave a query — reads return a view-model.
     mediaKey: v.string(),
-    mediaType: v.union(
-      v.literal("image"),
-      v.literal("gif"),
-      v.literal("video"),
-    ),
+    mediaType: mediaTypeValidator,
     tags: v.array(v.string()),
     // Authoritative author reference. Display name is resolved live from
     // `users.name` at read time, never denormalized onto the meme.
