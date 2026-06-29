@@ -1,0 +1,269 @@
+import { api } from "@convex/_generated/api";
+import type { FeedMeme } from "@convex/memes";
+import { Title } from "@solidjs/meta";
+import { useSearchParams } from "@solidjs/router";
+import { createEffect, createSignal, For, on, onCleanup, Show } from "solid-js";
+import { MemeCard } from "~/components/MemeCard";
+import { convex } from "~/lib/convex";
+import { useQuery } from "~/lib/convex-solid";
+
+type Meme = FeedMeme;
+type MediaType = FeedMeme["mediaType"];
+
+const MEDIA_TYPES: { value: MediaType; label: string }[] = [
+  { value: "image", label: "Image" },
+  { value: "gif", label: "GIF" },
+  { value: "video", label: "Video" },
+];
+
+const PAGE_SIZE = 5;
+const DEBOUNCE_MS = 250;
+
+function asMediaType(value: unknown): MediaType | undefined {
+  return value === "image" || value === "gif" || value === "video"
+    ? value
+    : undefined;
+}
+
+/**
+ * Single-mode relevance search (`/search`, epic #49, ADR 0010). The URL is the
+ * state: `q` (committed query) and `type` (media-type refinement) query params;
+ * the pagination cursor stays out of the URL. Reloading or sharing the URL
+ * reproduces the same search.
+ *
+ * Pagination mirrors the feed (reactive first page + appended later pages +
+ * `IntersectionObserver` infinite scroll), with one addition: an accumulator
+ * keyed to the current search **signature** (`q` + `type`) that resets results
+ * when the signature changes, so a new query discards stale results instead of
+ * piling new ones under them. A first page belonging to the previous signature
+ * is ignored while the new subscription is still `isStale`.
+ *
+ * Typing is debounced (~250ms) before the URL `q` updates, and that update uses
+ * `replace` so the back button doesn't walk every keystroke. The media-type
+ * control is inert until there's a query — there is no type-only browse here.
+ */
+export default function Search() {
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const query = () =>
+    typeof searchParams.q === "string" ? searchParams.q : "";
+  const mediaType = () => asMediaType(searchParams.type);
+  const trimmedQuery = () => query().trim();
+  const hasQuery = () => trimmedQuery().length > 0;
+  const signature = () => JSON.stringify([trimmedQuery(), mediaType() ?? ""]);
+
+  // The text box is controlled locally for responsiveness; the committed URL `q`
+  // follows on a debounce. Two guarded effects keep them in sync without looping:
+  // text → URL (debounced), and URL → text (external navigation, e.g. a tag link
+  // or the back button). Each writes only when the values actually diverge.
+  const [text, setText] = createSignal(query());
+
+  createEffect(
+    on(text, (value) => {
+      const handle = setTimeout(() => {
+        const committed = value.trim();
+        if (committed !== query()) {
+          setSearchParams({ q: committed || undefined }, { replace: true });
+        }
+      }, DEBOUNCE_MS);
+      onCleanup(() => clearTimeout(handle));
+    }),
+  );
+
+  // Sync external navigation (tag link, back button) back into the box. Compare
+  // against the trimmed text so committing whitespace-only edits of the same
+  // query doesn't strip spaces the user is still typing.
+  createEffect(
+    on(query, (value) => {
+      if (value !== text().trim()) setText(value);
+    }),
+  );
+
+  // Reactive first page. Disabled while the query is empty so we don't hold a
+  // pointless subscription (the server short-circuits an empty query anyway).
+  const search = useQuery(
+    api.memes.searchMemes,
+    () => ({
+      query: trimmedQuery(),
+      ...(mediaType() ? { mediaType: mediaType() } : {}),
+      paginationOpts: { numItems: PAGE_SIZE, cursor: null },
+    }),
+    () => ({ enabled: hasQuery() }),
+  );
+
+  const [items, setItems] = createSignal<Meme[]>([]);
+  const [cursor, setCursor] = createSignal<string | null>(null);
+  const [isDone, setIsDone] = createSignal(false);
+  const [isLoadingMore, setIsLoadingMore] = createSignal(false);
+  const [sentinelRef, setSentinelRef] = createSignal<HTMLDivElement>();
+
+  // Signature-keyed reset: a new query/type discards the previous accumulator.
+  createEffect(
+    on(signature, () => {
+      setItems([]);
+      setCursor(null);
+      setIsDone(false);
+    }),
+  );
+
+  // Apply the reactive first page. `isStale` means the data still belongs to the
+  // previous signature (args just changed), so skip it until the new page lands.
+  // Merge mirrors the feed: the fresh page leads, already-appended pages follow.
+  createEffect(() => {
+    if (!hasQuery()) return;
+    if (search.isStale()) return;
+    const firstPage = search.data();
+    if (!firstPage) return;
+
+    setItems((current) => {
+      if (current.length === 0) return firstPage.page;
+      const firstPageIds = new Set(firstPage.page.map((meme) => meme._id));
+      const remaining = current.filter((meme) => !firstPageIds.has(meme._id));
+      return [...firstPage.page, ...remaining];
+    });
+    setCursor(firstPage.continueCursor);
+    setIsDone(firstPage.isDone);
+  });
+
+  async function loadMore() {
+    if (isLoadingMore() || isDone() || cursor() === null || !hasQuery()) return;
+    setIsLoadingMore(true);
+    const requestSignature = signature();
+
+    try {
+      const nextPage = await convex.query(api.memes.searchMemes, {
+        query: trimmedQuery(),
+        ...(mediaType() ? { mediaType: mediaType() } : {}),
+        paginationOpts: { numItems: PAGE_SIZE, cursor: cursor() },
+      });
+      // Discard a page whose signature changed while the request was in flight.
+      if (requestSignature !== signature()) return;
+      setItems((current) => [...current, ...nextPage.page]);
+      setCursor(nextPage.continueCursor);
+      setIsDone(nextPage.isDone);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }
+
+  createEffect(() => {
+    const sentinel = sentinelRef();
+    if (!sentinel) return;
+    if (isDone() || !hasQuery()) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) void loadMore();
+      },
+      { rootMargin: "200px 0px" },
+    );
+    observer.observe(sentinel);
+    onCleanup(() => observer.disconnect());
+  });
+
+  function toggleType(value: MediaType) {
+    setSearchParams(
+      { type: mediaType() === value ? undefined : value },
+      { replace: true },
+    );
+  }
+
+  // Five client states, derived from the URL + subscription. `loading` and
+  // `empty` both have zero items, but `loading` is "results not in yet" (data
+  // missing or stale) while `empty` is "loaded, nothing matched".
+  const state = (): "idle" | "error" | "results" | "loading" | "empty" => {
+    if (!hasQuery()) return "idle";
+    if (search.error()) return "error";
+    if (items().length > 0) return "results";
+    if (search.isStale() || search.data() === undefined) return "loading";
+    return "empty";
+  };
+
+  return (
+    <main class="mx-auto max-w-2xl space-y-5 px-5 py-6">
+      <Title>{hasQuery() ? `Search: ${trimmedQuery()}` : "Search"}</Title>
+
+      <form
+        onSubmit={(event) => {
+          // Flush the debounce so Enter commits the current text immediately.
+          event.preventDefault();
+          const committed = text().trim();
+          if (committed !== query()) {
+            setSearchParams({ q: committed || undefined }, { replace: true });
+          }
+        }}
+        class="space-y-3"
+      >
+        <input
+          type="search"
+          value={text()}
+          onInput={(event) => setText(event.currentTarget.value)}
+          placeholder="Search memes by title or tag"
+          aria-label="Search memes by title or tag"
+          class="w-full rounded-xl border border-white/10 bg-transparent px-4 py-2.5 text-sm outline-none placeholder:text-[#5a5a6e]/70 focus:border-[#63e6be]/40"
+        />
+
+        {/* Media-type refinement — inert (disabled, dimmed) until there's a query. */}
+        <div
+          class="inline-flex rounded-lg border border-white/10 p-1"
+          classList={{ "opacity-40": !hasQuery() }}
+          role="group"
+          aria-label="Filter by media type"
+        >
+          <For each={MEDIA_TYPES}>
+            {(option) => (
+              <button
+                type="button"
+                disabled={!hasQuery()}
+                aria-pressed={mediaType() === option.value}
+                onClick={() => toggleType(option.value)}
+                class={`rounded-md px-3 py-1 text-xs font-bold transition disabled:cursor-not-allowed ${
+                  mediaType() === option.value
+                    ? "bg-[#63e6be]/10 text-[#63e6be]"
+                    : "text-[#5a5a6e]"
+                }`}
+              >
+                {option.label}
+              </button>
+            )}
+          </For>
+        </div>
+      </form>
+
+      <Show when={state() === "idle"}>
+        <p class="text-[#5a5a6e]">Search memes by title or tag</p>
+      </Show>
+
+      <Show when={state() === "loading"}>
+        <p class="text-[#5a5a6e]">Searching...</p>
+      </Show>
+
+      <Show when={state() === "empty"}>
+        <p class="text-[#5a5a6e]">No memes matched your search.</p>
+      </Show>
+
+      <Show when={state() === "error"}>
+        <p class="text-[#d08770]">
+          {search.error()?.message ?? "Could not run that search."}
+        </p>
+      </Show>
+
+      <Show when={state() === "results"}>
+        <For each={items()}>
+          {(meme) => (
+            <MemeCard
+              meme={meme}
+              onDeleted={(id) =>
+                setItems((current) => current.filter((m) => m._id !== id))
+              }
+            />
+          )}
+        </For>
+        <Show when={isLoadingMore()}>
+          <p class="py-4 text-center text-sm text-[#5a5a6e]">Loading more...</p>
+        </Show>
+        <div ref={setSentinelRef} class="h-px" aria-hidden="true" />
+      </Show>
+    </main>
+  );
+}
