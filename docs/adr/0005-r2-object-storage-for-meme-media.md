@@ -76,6 +76,16 @@ the Cloudflare custom domain — a stable, CDN-cacheable URL. Key path segments 
 encoded individually so `/` stays a separator. This is the load-bearing choice
 that makes R2 worth it over Convex storage: the CDN, not Convex, serves the bytes.
 
+## Considered alternatives
+
+- **Convex file storage.** Simplest and most on-brand for a Convex-native repo,
+  and `storageId` would give the same key-indirection. Rejected because it is not
+  a CDN and bills egress, which is the dominant cost for this workload at any real
+  traffic.
+- **S3 + CloudFront.** Equivalent capability, but more infrastructure and no
+  egress-free tier; R2 + Cloudflare gets the same outcome with less cost and a
+  component that keeps the upload flow Convex-driven.
+
 ## Consequences
 
 - Enabling R2 requires billing info on the Cloudflare account even though

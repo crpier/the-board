@@ -38,8 +38,7 @@ The product should let guests browse public content immediately, let authenticat
 - A meme has one primary media item.
 - Supported media types are images, GIFs, and videos.
 - Title is optional.
-- Description is optional.
-- Tags are normalized and reusable.
+- Tags are canonicalized and reusable.
 - Canonical user-authored metadata remains distinct from AI-generated suggestions.
 
 ### Discovery

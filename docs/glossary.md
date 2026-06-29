@@ -6,10 +6,18 @@ load-bearing.
 
 ## Meme
 
-A public media post with one primary media item (image, GIF, or video) and
-optional title, description, and tags. Has a separate **visibility** (who can see
-it) and **lifecycle status** (draft, processing, ready, failed, deleted). Public
-browsing shows only memes that are both `public` and `ready`.
+A public media post with one primary media item (image, GIF, or video), an
+optional title, and tags. Has a separate **visibility** (who can see it) and
+**lifecycle status** (draft, processing, ready, failed, deleted). Public browsing
+shows only memes that are both `public` and `ready`.
+
+## Tags
+
+Short labels attached to a meme for discovery. **Canonicalized** on write —
+lowercased, trimmed, whitespace-collapsed, and de-duplicated — so the same idea
+maps to a single tag and tags are reusable across memes. Stored as a string array
+on the meme for now; a shared tag table (clickable tag pages, autocomplete) is
+deferred to the discovery work.
 
 ## Vote
 
