@@ -17,7 +17,17 @@ The resolved read shape a meme query returns to the client, never the raw
 `Doc<"memes">`. Foreign keys are resolved server-side: `authorId` becomes a live
 `authorName` read from `users.name` (so a profile rename shows everywhere with no
 backfill), and the stored R2 `mediaKey` becomes a CDN `mediaUrl`. Raw foreign
-keys never leave the query (see ADR 0006).
+keys never leave the query (see ADR 0006). It also carries an `isOwner` flag
+(computed from `authorId === getAuthUserId`, so the raw author id stays server-side
+while the client can gate owner-only edit/delete controls) and the meme's
+`visibility` (which the owner's edit form prefills).
+
+## Tombstone (delete)
+
+Deleting a meme is a soft delete: its lifecycle `status` is flipped to `deleted`
+(which hides it everywhere — public reads only show `public` + `ready`) and its R2
+object is reclaimed, while vote rows are left in place. Owner-only, authorized by
+`authorId === getAuthUserId`. There is no restore UI (see ADR 0009).
 
 ## Tags
 
