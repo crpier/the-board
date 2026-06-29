@@ -50,8 +50,15 @@ The product should let guests browse public content immediately, let authenticat
 - A meme detail page exists as the canonical destination for an individual meme.
 - The feed links out to that detail page through each card's timestamp and title;
   media, author, and tags are not the link target.
-- Search should cover text metadata and support filters such as tags and media type.
-- Tags should be clickable and usable as a discovery tool.
+- Anyone — signed in or not — can search public, ready memes by a query that
+  matches a meme's title and its tags together, ranked by relevance.
+- Media type (image / GIF / video) refines an active search; it is not a
+  standalone browse axis, since a search always carries query text.
+- Search never reveals memes a viewer can't otherwise see: `private`,
+  not-yet-`ready`, and deleted memes never appear — including an owner's own
+  `private` memes.
+- Tags are a discovery tool: a meme's tags are searchable terms, and tags are
+  meant to be clickable to run a search for that tag.
 
 ### Interaction
 
@@ -123,7 +130,6 @@ The product should let guests browse public content immediately, let authenticat
 
 ## Open product questions
 
-- How much of search belongs in the first browse experience versus later discovery work?
 - When should duplicate detection expand from exact matching into perceptual and AI-assisted analysis?
 
 ## Resolved product questions
@@ -133,3 +139,7 @@ The product should let guests browse public content immediately, let authenticat
   lightweight "Sign in to vote" tooltip surfaces on the controls — clicking does
   nothing, with no modal or redirect. Resolved in the Voting slice; may be
   escalated later if participation is too easy to miss.
+- How much of search belongs in the first browse experience: search is a single
+  relevance mode over a meme's title + tags, with media type as a refinement and
+  no recency/browse-only path. Tag browsing is therefore relevance-ordered, not
+  chronological. Resolved in the Faceted Search epic (ADR 0010).

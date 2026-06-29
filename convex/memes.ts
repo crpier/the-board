@@ -46,6 +46,26 @@ const feedMemeValidator = v.object({
 export type FeedMeme = Infer<typeof feedMemeValidator>;
 
 /**
+ * The paginated read envelope shared by every feed-shaped query
+ * (`listPublicMemes`, `searchMemes`). It mirrors Convex's `.paginate()` result;
+ * `splitCursor` and `pageStatus` are only present when Convex splits a page,
+ * hence optional. Declared once so the page shape can't drift between queries.
+ */
+const feedPageValidator = v.object({
+  page: v.array(feedMemeValidator),
+  isDone: v.boolean(),
+  continueCursor: v.string(),
+  splitCursor: v.optional(v.union(v.string(), v.null())),
+  pageStatus: v.optional(
+    v.union(
+      v.literal("SplitRecommended"),
+      v.literal("SplitRequired"),
+      v.null(),
+    ),
+  ),
+});
+
+/**
  * Resolve a stored meme into its feed view-model. The author's display name is
  * read live from `users.name` (falling back to "Anon", as elsewhere) rather than
  * denormalized, so a profile rename is reflected everywhere immediately.
@@ -78,21 +98,7 @@ async function toFeedMeme(
 export const listPublicMemes = query({
   args: { paginationOpts: paginationOptsValidator },
   // Pins the page shape to the view-model so raw FKs can't reach the client.
-  // The envelope mirrors Convex's `.paginate()` result; `splitCursor` and
-  // `pageStatus` are only present when Convex splits a page, hence optional.
-  returns: v.object({
-    page: v.array(feedMemeValidator),
-    isDone: v.boolean(),
-    continueCursor: v.string(),
-    splitCursor: v.optional(v.union(v.string(), v.null())),
-    pageStatus: v.optional(
-      v.union(
-        v.literal("SplitRecommended"),
-        v.literal("SplitRequired"),
-        v.null(),
-      ),
-    ),
-  }),
+  returns: feedPageValidator,
   handler: async (ctx, args) => {
     const viewerId = await getAuthUserId(ctx);
     const result = await ctx.db
@@ -162,6 +168,58 @@ export const getMeme = query({
 });
 
 /**
+ * Reactive full-text search backing `/search` (epic #49, ADR 0010). Returns the
+ * same paginated envelope and `FeedMeme` view-model as `listPublicMemes`, so
+ * result cards get live votes, the owner flag, and owner controls for free.
+ *
+ * Single-mode relevance search: the one `search_searchText` index ranks public,
+ * ready memes by how well their title + tags match `query`. Visibility/status
+ * are pinned to `public`/`ready` for **every** viewer — a static,
+ * viewer-independent filter, so an owner's own private memes never surface and
+ * there is no per-viewer branch that could leak a private meme's existence.
+ * `mediaType` is an optional refinement, applied only when provided.
+ *
+ * Empty or whitespace-only `query` returns an empty page rather than throwing or
+ * running an empty search (a Convex search needs a non-empty term). All
+ * narrowing is index-driven — no `.filter()` (Convex guideline).
+ */
+export const searchMemes = query({
+  args: {
+    query: v.string(),
+    mediaType: v.optional(mediaTypeValidator),
+    paginationOpts: paginationOptsValidator,
+  },
+  returns: feedPageValidator,
+  handler: async (ctx, args) => {
+    const text = args.query.trim();
+    if (text.length === 0) {
+      return { page: [], isDone: true, continueCursor: "" };
+    }
+
+    const viewerId = await getAuthUserId(ctx);
+    const result = await ctx.db
+      .query("memes")
+      .withSearchIndex("search_searchText", (q) => {
+        const ranked = q
+          .search("searchText", text)
+          .eq("visibility", "public")
+          .eq("status", "ready");
+        return args.mediaType === undefined
+          ? ranked
+          : ranked.eq("mediaType", args.mediaType);
+      })
+      .paginate(args.paginationOpts);
+
+    return {
+      ...result,
+      page: await Promise.all(
+        result.page.map((meme) => toFeedMeme(ctx, meme, viewerId)),
+      ),
+    };
+  },
+});
+
+/**
  * Canonicalize user-supplied tags (`docs/glossary.md#tags`): trim, lowercase,
  * collapse internal whitespace, drop empties, and de-duplicate while preserving
  * first-seen order so the same idea always maps to one reusable tag.
@@ -177,6 +235,21 @@ function canonicalizeTags(tags: string[]): string[] {
     }
   }
   return canonical;
+}
+
+/**
+ * Build the denormalized `searchText` for a meme: its title plus its
+ * (already-canonicalized) tags, joined by spaces. The author is deliberately
+ * excluded — `authorName` is resolved live from `users.name` (ADR 0006), and
+ * folding it in would reintroduce the rename staleness ADR 0006 exists to avoid.
+ *
+ * Shared the same way `canonicalizeTags` is: computed on every write that
+ * touches title/tags (the create-lifecycle insert and the owner edit) so search
+ * always reflects current metadata. Empty input yields `""`, which never matches
+ * a search — correct degradation for a titleless, tagless meme.
+ */
+function buildSearchText(title: string | undefined, tags: string[]): string {
+  return [title ?? "", ...tags].join(" ").trim();
 }
 
 /**
@@ -279,6 +352,8 @@ export const insertProcessingMeme = internalMutation({
   handler: async (ctx, args) => {
     const memeId = await ctx.db.insert("memes", {
       title: args.title,
+      // `args.tags` are already canonicalized by the caller (`createMeme`/seed).
+      searchText: buildSearchText(args.title, args.tags),
       visibility: args.visibility,
       status: "processing",
       mediaKey: args.mediaKey,
@@ -365,11 +440,14 @@ export const updateMeme = mutation({
     const viewerId = await getAuthUserId(ctx);
     await requireOwnedMeme(ctx, args.memeId, viewerId);
 
-    const title = args.title?.trim();
+    const title = args.title?.trim() || undefined;
+    const tags = canonicalizeTags(args.tags);
     await ctx.db.patch(args.memeId, {
-      title: title ? title : undefined,
-      tags: canonicalizeTags(args.tags),
+      title,
+      tags,
       visibility: args.visibility,
+      // Recompute so the edited title/tags are immediately searchable.
+      searchText: buildSearchText(title, tags),
     });
     return null;
   },
@@ -417,5 +495,51 @@ export const tombstoneMeme = internalMutation({
     const meme = await requireOwnedMeme(ctx, args.memeId, viewerId);
     await ctx.db.patch(args.memeId, { status: "deleted" });
     return meme.mediaKey;
+  },
+});
+
+/**
+ * One-time, idempotent backfill for `searchText` (epic #49). Memes written
+ * before the field shipped have no `searchText` and are therefore invisible to
+ * `searchMemes`; this populates it from each row's current title + tags so the
+ * back catalog becomes searchable.
+ *
+ * Bounded by pagination — the `memes` table grows unbounded and a large import
+ * is planned, so it never `collect()`s the table. The caller drives it one page
+ * at a time, feeding `continueCursor` back until `isDone`, e.g.:
+ *
+ *     pnpm convex run memes:backfillSearchText '{"paginationOpts":{"numItems":100,"cursor":null}}'
+ *
+ * Idempotent: it only writes rows where `searchText` is still missing, so rows
+ * already populated (by this backfill or by a normal write) are skipped on a
+ * re-run. `patched` reports how many rows this page actually touched.
+ */
+export const backfillSearchText = internalMutation({
+  args: { paginationOpts: paginationOptsValidator },
+  returns: v.object({
+    isDone: v.boolean(),
+    continueCursor: v.string(),
+    scanned: v.number(),
+    patched: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const result = await ctx.db.query("memes").paginate(args.paginationOpts);
+
+    let patched = 0;
+    for (const meme of result.page) {
+      if (meme.searchText === undefined) {
+        await ctx.db.patch(meme._id, {
+          searchText: buildSearchText(meme.title, meme.tags),
+        });
+        patched++;
+      }
+    }
+
+    return {
+      isDone: result.isDone,
+      continueCursor: result.continueCursor,
+      scanned: result.page.length,
+      patched,
+    };
   },
 });

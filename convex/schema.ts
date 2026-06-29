@@ -22,6 +22,12 @@ export default defineSchema({
     .index("phone", ["phone"]),
   memes: defineTable({
     title: v.optional(v.string()),
+    // Denormalized full-text search blob: title + canonicalized tags joined by
+    // spaces (author excluded — see ADR 0010). Computed on every title/tags
+    // write via `buildSearchText`. Optional so the field can ship before the
+    // backfill populates pre-existing rows; a missing value simply never
+    // matches a search.
+    searchText: v.optional(v.string()),
     visibility: visibilityValidator,
     status: v.union(
       v.literal("draft"),
@@ -42,7 +48,14 @@ export default defineSchema({
     downvoteCount: v.number(),
   })
     .index("by_visibility_and_status", ["visibility", "status"])
-    .index("by_author", ["authorId"]),
+    .index("by_author", ["authorId"])
+    // Single search index backing `/search` (ADR 0010). `mediaType` is the one
+    // refinement filter; `visibility`/`status` are pinned to public+ready for
+    // every viewer so private/non-ready memes never surface.
+    .searchIndex("search_searchText", {
+      searchField: "searchText",
+      filterFields: ["visibility", "status", "mediaType"],
+    }),
   votes: defineTable({
     userId: v.id("users"),
     memeId: v.id("memes"),
