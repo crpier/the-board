@@ -1,4 +1,4 @@
-import type { Doc } from "@convex/_generated/dataModel";
+import type { FeedMeme } from "@convex/memes";
 import { For, Show } from "solid-js";
 import {
   differenceInMinutes,
@@ -7,7 +7,7 @@ import {
 } from "date-fns";
 import { VoteControl } from "~/components/VoteControl";
 
-type Meme = Doc<"memes">;
+type Meme = FeedMeme;
 
 function formatTimeAgo(creationTime: number): string {
   const date = new Date(creationTime);

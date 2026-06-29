@@ -11,6 +11,14 @@ optional title, and tags. Has a separate **visibility** (who can see it) and
 **lifecycle status** (draft, processing, ready, failed, deleted). Public browsing
 shows only memes that are both `public` and `ready`.
 
+## Feed meme (view-model)
+
+The resolved read shape a meme query returns to the client, never the raw
+`Doc<"memes">`. Foreign keys are resolved server-side: `authorId` becomes a live
+`authorName` read from `users.name` (so a profile rename shows everywhere with no
+backfill), and the stored R2 `mediaKey` becomes a CDN `mediaUrl`. Raw foreign
+keys never leave the query (extends ADR 0001).
+
 ## Tags
 
 Short labels attached to a meme for discovery. **Canonicalized** on write —

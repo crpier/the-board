@@ -2,11 +2,11 @@ import { usePublicFeed } from "~/lib/public-feed";
 import { Title } from "@solidjs/meta";
 import { createEffect, createSignal, For, onCleanup, Show } from "solid-js";
 import { MemeCard } from "~/components/MemeCard";
-import { Doc } from "@convex/_generated/dataModel";
+import type { FeedMeme } from "@convex/memes";
 import { api } from "@convex/_generated/api";
 import { convex } from "~/lib/convex";
 
-type Meme = Doc<"memes">;
+type Meme = FeedMeme;
 
 export default function Home() {
   const memes = usePublicFeed();
