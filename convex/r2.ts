@@ -1,11 +1,10 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { R2 } from "@convex-dev/r2";
-import type { GenericQueryCtx } from "convex/server";
 import { v } from "convex/values";
 
 import { components } from "./_generated/api";
 import type { DataModel } from "./_generated/dataModel";
-import { query } from "./_generated/server";
+import { type QueryCtx, query } from "./_generated/server";
 
 /**
  * R2 object store for meme media (see ADR 0005).
@@ -59,9 +58,8 @@ export const getMediaUrl = query({
  * Require an authenticated user. Upload and delete are participation flows, so
  * guests must not get a presigned URL or be able to remove objects.
  */
-async function requireUser(ctx: GenericQueryCtx<DataModel>) {
-  const userId = await getAuthUserId(ctx);
-  if (!userId) {
+async function requireUser(ctx: QueryCtx) {
+  if (!(await getAuthUserId(ctx))) {
     throw new Error("Not authenticated");
   }
 }

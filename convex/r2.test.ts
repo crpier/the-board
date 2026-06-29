@@ -11,7 +11,9 @@ const modules = import.meta.glob("./**/*.ts");
  * `getMediaUrl` is a pure key → CDN URL resolver, so it never touches the R2
  * component and can be exercised without a mounted bucket. The presigned
  * upload / metadata / delete helpers are component-backed and require a real
- * bucket, so they are covered by the manual acceptance check in the PR, not here.
+ * bucket, so the full upload → serve round trip is covered by the manual
+ * acceptance check in the PR, not here. The auth gate runs before any bucket
+ * call, so it is verified below without a mounted bucket.
  */
 describe("getMediaUrl", () => {
   const prev = process.env.R2_PUBLIC_URL;
@@ -48,5 +50,15 @@ describe("getMediaUrl", () => {
     await expect(
       t.query(api.r2.getMediaUrl, { key: "abc.png" }),
     ).rejects.toThrow(/R2_PUBLIC_URL/);
+  });
+});
+
+describe("upload auth gate", () => {
+  test("rejects an unauthenticated generateUploadUrl call", async () => {
+    const t = convexTest(schema, modules);
+    // No identity: checkUpload runs before any bucket call and must reject.
+    await expect(t.mutation(api.r2.generateUploadUrl, {})).rejects.toThrow(
+      /Not authenticated/,
+    );
   });
 });
