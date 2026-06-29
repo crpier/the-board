@@ -1,6 +1,7 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import type { FeedMeme } from "@convex/memes";
+import { A } from "@solidjs/router";
 import { For, Show, createSignal, untrack } from "solid-js";
 import {
   differenceInMinutes,
@@ -44,6 +45,7 @@ export function MemeCard(props: {
   onDeleted?: (id: Id<"memes">) => void;
 }) {
   const [editing, setEditing] = createSignal(false);
+  const detailHref = () => `/meme/${props.meme._id}`;
 
   return (
     <article class="overflow-hidden rounded-2xl border border-white bg-gradient-to-b">
@@ -52,7 +54,12 @@ export function MemeCard(props: {
         {(title) => (
           <div class="px-4 pt-4 pb-2">
             <h2 class="font-display text-center text-lg font-bold text-white">
-              {title()}
+              <A
+                href={detailHref()}
+                class="transition-colors hover:text-[#63e6be]"
+              >
+                {title()}
+              </A>
             </h2>
           </div>
         )}
@@ -110,10 +117,15 @@ export function MemeCard(props: {
             />
           </Show>
 
-          {/* Author + time — pushed to the right */}
-          <span class="ml-auto cursor-pointer text-[11px] text-[#6a6a7e]">
+          {/* Author (inert) + time permalink — pushed to the right */}
+          <span class="ml-auto text-[11px] text-[#6a6a7e]">
             @{props.meme.authorName} &middot;{" "}
-            {formatTimeAgo(props.meme._creationTime)}
+            <A
+              href={detailHref()}
+              class="transition-colors hover:text-[#63e6be]"
+            >
+              {formatTimeAgo(props.meme._creationTime)}
+            </A>
           </span>
         </div>
 

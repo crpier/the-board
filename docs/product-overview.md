@@ -48,6 +48,8 @@ The product should let guests browse public content immediately, let authenticat
 - Guests can browse public memes without an account.
 - Public meme browsing centers on a reverse-chronological feed.
 - A meme detail page exists as the canonical destination for an individual meme.
+- The feed links out to that detail page through each card's timestamp and title;
+  media, author, and tags are not the link target.
 - Search should cover text metadata and support filters such as tags and media type.
 - Tags should be clickable and usable as a discovery tool.
 
