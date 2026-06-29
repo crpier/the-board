@@ -16,6 +16,11 @@ export default function Navbar() {
         the-board
       </a>
       <div class="flex items-center gap-3">
+        {/* Plain link to the search page — not an inline live search box.
+            Search is open to everyone, so it sits outside the auth gate. */}
+        <a href="/search" class="text-sm text-[#5a5a6e] hover:text-[#63e6be]">
+          Search
+        </a>
         <Show
           when={!auth.isLoading()}
           fallback={<span class="text-sm text-[#5a5a6e]">Checking auth…</span>}
