@@ -28,17 +28,23 @@ export default defineSchema({
       v.literal("failed"),
       v.literal("deleted"),
     ),
-    mediaUrl: v.string(),
+    // R2 object key for the primary media item; resolved to a CDN URL at read
+    // time (ADR 0005). Raw keys never leave a query — reads return a view-model.
+    mediaKey: v.string(),
     mediaType: v.union(
       v.literal("image"),
       v.literal("gif"),
       v.literal("video"),
     ),
     tags: v.array(v.string()),
-    authorName: v.string(),
+    // Authoritative author reference. Display name is resolved live from
+    // `users.name` at read time, never denormalized onto the meme.
+    authorId: v.id("users"),
     upvoteCount: v.number(),
     downvoteCount: v.number(),
-  }).index("by_visibility_and_status", ["visibility", "status"]),
+  })
+    .index("by_visibility_and_status", ["visibility", "status"])
+    .index("by_author", ["authorId"]),
   votes: defineTable({
     userId: v.id("users"),
     memeId: v.id("memes"),

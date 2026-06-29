@@ -40,6 +40,8 @@ The product should let guests browse public content immediately, let authenticat
 - Title is optional.
 - Tags are canonicalized and reusable.
 - Canonical user-authored metadata remains distinct from AI-generated suggestions.
+- A meme is attributed to its author by their current display name; renaming a
+  profile updates the attribution everywhere, with no stored copy to backfill.
 
 ### Discovery
 

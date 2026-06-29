@@ -25,10 +25,10 @@ async function setup(memeOverrides: Record<string, unknown> = {}) {
     return await ctx.db.insert("memes", {
       visibility: "public",
       status: "ready",
-      mediaUrl: "https://example.com/meme.png",
+      mediaKey: "memes/test.png",
       mediaType: "image",
       tags: [],
-      authorName: "Tester",
+      authorId: userId,
       upvoteCount: 0,
       downvoteCount: 0,
       ...memeOverrides,
@@ -195,15 +195,14 @@ describe("castVote", () => {
     const { t, userId, memeId, asUser } = await setup();
 
     // Votes carry no ownership model (ADR 0004), so authoring a meme must not
-    // block voting on it. `authorName` is the only authorship signal the schema
-    // records, so assert the voting user is in fact this meme's recorded author
-    // before voting — otherwise the test would prove nothing about self-votes.
-    const author = await t.run(async (ctx) => {
-      const user = await ctx.db.get(userId);
+    // block voting on it. `authorId` is the schema's authorship signal, so
+    // assert the voting user is in fact this meme's recorded author before
+    // voting — otherwise the test would prove nothing about self-votes.
+    const authorId = await t.run(async (ctx) => {
       const meme = await ctx.db.get(memeId);
-      return { userName: user?.name, authorName: meme?.authorName };
+      return meme?.authorId;
     });
-    expect(author.authorName).toBe(author.userName);
+    expect(authorId).toBe(userId);
 
     await asUser.mutation(api.votes.castVote, { memeId, value: "up" });
 
