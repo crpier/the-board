@@ -54,4 +54,81 @@ describe("SEED_MEMES asset set", () => {
       }
     }
   });
+
+  test("vote tallies are varied so aggregates are exercised end to end", () => {
+    const tallies = SEED_MEMES.flatMap((m) => (m.votes ? [m.votes] : []));
+    // Non-zero counts, a downvote-heavy meme, and a public meme with no votes.
+    expect(tallies.some((v) => v.up > 0)).toBe(true);
+    expect(tallies.some((v) => v.down > v.up)).toBe(true);
+    expect(
+      SEED_MEMES.some(
+        (m) => m.visibility === "public" && m.votes === undefined,
+      ),
+    ).toBe(true);
+    for (const v of tallies) {
+      expect(Number.isInteger(v.up) && v.up >= 0).toBe(true);
+      expect(Number.isInteger(v.down) && v.down >= 0).toBe(true);
+    }
+  });
+});
+
+describe("ensureSeedVoters", () => {
+  test("mints the requested number of non-admin users", async () => {
+    const t = convexTest(schema, modules);
+    const ids = await t.mutation(internal.seed.ensureSeedVoters, { count: 3 });
+    expect(ids).toHaveLength(3);
+
+    const users = await t.run((ctx) =>
+      Promise.all(ids.map((id) => ctx.db.get(id))),
+    );
+    for (const user of users) {
+      expect(user?.isAdmin).toBeFalsy();
+    }
+  });
+});
+
+describe("seedVotes", () => {
+  test("inserts one row per voter and sets counts to match", async () => {
+    const t = convexTest(schema, modules);
+    const { memeId, voterIds } = await t.run(async (ctx) => {
+      const authorId = await ctx.db.insert("users", { name: "Author" });
+      const memeId = await ctx.db.insert("memes", {
+        title: "votable",
+        visibility: "public",
+        status: "ready",
+        mediaKey: "k",
+        mediaType: "image",
+        tags: [],
+        authorId,
+        upvoteCount: 0,
+        downvoteCount: 0,
+      });
+      const voterIds = [];
+      for (let i = 0; i < 3; i++) {
+        voterIds.push(await ctx.db.insert("users", { name: `V${i}` }));
+      }
+      return { memeId, voterIds };
+    });
+
+    await t.mutation(internal.seed.seedVotes, {
+      memeId,
+      voterIds,
+      up: 2,
+      down: 1,
+    });
+
+    const { meme, rows } = await t.run(async (ctx) => ({
+      meme: await ctx.db.get(memeId),
+      rows: await ctx.db
+        .query("votes")
+        .withIndex("by_meme", (q) => q.eq("memeId", memeId))
+        .collect(),
+    }));
+
+    expect(meme?.upvoteCount).toBe(2);
+    expect(meme?.downvoteCount).toBe(1);
+    // Counts equal the vote-row totals (ADR 0004 invariant).
+    expect(rows.filter((r) => r.value === "up")).toHaveLength(2);
+    expect(rows.filter((r) => r.value === "down")).toHaveLength(1);
+  });
 });

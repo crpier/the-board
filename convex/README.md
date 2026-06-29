@@ -8,15 +8,19 @@ See https://docs.convex.dev/functions for more.
 `seed.ts` repopulates a wiped **dev** feed without the upload UI (issue #32):
 
 ```sh
-npx convex run seed:seed
+pnpm convex run seed:seed
 ```
 
 It uploads the bundled sample media in `seedAssets.ts` (tiny placeholder image,
 GIF, and video, embedded as base64 since actions can't read the filesystem) to
 the dev R2 bucket, then publishes a meme per sample — owned by the first
-(auto-admin) user, minting a stand-in admin if `users` was wiped too. Uploads go
-through the real `r2.store` path and inserts reuse the `insertProcessingMeme`
-lifecycle, so the result is indistinguishable from a feed built through the UI.
+(auto-admin) user, minting a stand-in admin if `users` was wiped too. It also
+seeds a spread of votes (from a minted pool of dev voters) so the feed shows
+real, varied aggregates. Uploads go through the real `r2.store` path and inserts
+reuse the `insertProcessingMeme` lifecycle, so the feed renders and behaves like
+one built through the UI. It skips two UI-path steps the dev data doesn't need:
+`createMeme`'s server-authoritative re-validation and tag canonicalization (the
+samples are valid and the seed tags are already canonical).
 
 Prerequisites: the deployment's `R2_*` env vars must be set (the same ones the
 upload flow needs; see ADR 0005). The script is **not** idempotent — each run

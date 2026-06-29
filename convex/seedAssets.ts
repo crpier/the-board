@@ -66,12 +66,20 @@ export type SeedMemeSpec = {
   tags: string[];
   visibility: Visibility;
   sample: SeedSample;
+  /**
+   * Seed votes so the feed shows non-zero, varied aggregates and the vote
+   * resolver (`votes.cardState`) returns real totals. Each unit is one distinct
+   * dev voter (one vote per user per meme), so the seed mints a voter pool sized
+   * to the largest `up + down` here. Omit for a meme with no votes yet.
+   */
+  votes?: { up: number; down: number };
 };
 
 /**
  * A small, varied set: images, an animated GIF, and a video; tagged and
- * untitled entries; and a private meme so the public-feed visibility filter is
- * exercised (it must NOT appear in the guest feed).
+ * untitled entries; mixed vote tallies (including a downvote-heavy and a
+ * not-yet-voted entry); and a private meme so the public-feed visibility filter
+ * is exercised (it must NOT appear in the guest feed).
  */
 export const SEED_MEMES: SeedMemeSpec[] = [
   {
@@ -79,26 +87,31 @@ export const SEED_MEMES: SeedMemeSpec[] = [
     tags: ["reactions", "devlife"],
     visibility: "public",
     sample: IMAGE_A,
+    votes: { up: 7, down: 1 },
   },
   {
     title: "Tests passed on the first try",
     tags: ["reactions", "testing"],
     visibility: "public",
     sample: IMAGE_B,
+    votes: { up: 5, down: 0 },
   },
   {
     title: "Deploying on a Friday",
     tags: ["devops", "friday"],
     visibility: "public",
     sample: GIF,
+    votes: { up: 4, down: 3 },
   },
   {
     title: "Live demo, what could go wrong",
     tags: ["demos", "fail"],
     visibility: "public",
     sample: VIDEO,
+    votes: { up: 2, down: 5 },
   },
   {
+    // Untitled and not-yet-voted: exercises the zero-aggregate render path.
     tags: ["random"],
     visibility: "public",
     sample: IMAGE_C,
