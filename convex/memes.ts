@@ -11,21 +11,9 @@ import {
   query,
 } from "./_generated/server";
 import { r2, resolveUrl } from "./r2";
-
-/**
- * The kinds of media a meme can carry. Shared so the schema, the read
- * view-model, and the write path all agree on the literal set rather than
- * re-declaring it three times and risking drift.
- */
-const mediaTypeValidator = v.union(
-  v.literal("image"),
-  v.literal("gif"),
-  v.literal("video"),
-);
+import { mediaTypeValidator, visibilityValidator } from "./validators";
 
 type MediaType = Infer<typeof mediaTypeValidator>;
-
-const visibilityValidator = v.union(v.literal("public"), v.literal("private"));
 
 /**
  * A feed-ready meme: every foreign key resolved so the client renders straight
@@ -203,10 +191,15 @@ export const createMeme = action({
         "Unsupported media type. Upload an image, GIF, or video.",
       );
     }
-    if (
-      metadata.size === undefined ||
-      metadata.size > MEDIA_LIMITS[mediaType]
-    ) {
+    if (metadata.size === undefined) {
+      // Validation is server-authoritative; an object whose size we can't read
+      // can't be confirmed within a ceiling, so reject it rather than guess.
+      await r2.deleteObject(ctx, args.key);
+      throw new Error(
+        "Uploaded media is missing size metadata and can't be validated.",
+      );
+    }
+    if (metadata.size > MEDIA_LIMITS[mediaType]) {
       await r2.deleteObject(ctx, args.key);
       throw new Error(
         `That ${mediaType} exceeds the ${
