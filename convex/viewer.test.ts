@@ -4,8 +4,8 @@ import { describe, expect, test } from "vitest";
 
 import { api } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
+import { MAX_DISPLAY_NAME_LENGTH } from "./profile";
 import schema from "./schema";
-import { MAX_DISPLAY_NAME_LENGTH } from "./viewer";
 
 const modules = import.meta.glob("./**/*.ts");
 

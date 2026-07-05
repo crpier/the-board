@@ -1,5 +1,5 @@
 import { api } from "@convex/_generated/api";
-import { MAX_DISPLAY_NAME_LENGTH } from "@convex/viewer";
+import { MAX_DISPLAY_NAME_LENGTH } from "@convex/profile";
 import { Title } from "@solidjs/meta";
 import { Show, createSignal, untrack } from "solid-js";
 import { useConvexAuth } from "~/lib/convex-auth-solid";

@@ -1,12 +1,9 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-
-/**
- * Cap for the user-set display name. Exported so the settings form can set the
- * input's `maxlength` from the same constant the server enforces.
- */
-export const MAX_DISPLAY_NAME_LENGTH = 40;
+// Shared with the settings form via the backend-free `convex/profile.ts`
+// (ADR 0008) — the client must not import this server module for the cap.
+import { MAX_DISPLAY_NAME_LENGTH } from "./profile";
 
 export const current = query({
   args: {},
