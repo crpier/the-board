@@ -17,7 +17,8 @@ import { mediaTypeValidator, visibilityValidator } from "./validators";
 
 /**
  * A feed-ready meme: every foreign key resolved so the client renders straight
- * from this object. `authorId → users.name` becomes a live display name and the
+ * from this object. `authorId` becomes a live display name (the user-set
+ * `displayName` override, else the OAuth-managed `name`) and the
  * `mediaKey` becomes an R2/CDN URL here, so raw FKs never leave the query
  * (see ADR 0006). This validator is the single source of truth for the shape:
  * the `FeedMeme` type is inferred from it and it is the query's `returns`
@@ -67,8 +68,9 @@ const feedPageValidator = v.object({
 
 /**
  * Resolve a stored meme into its feed view-model. The author's display name is
- * read live from `users.name` (falling back to "Anon", as elsewhere) rather than
- * denormalized, so a profile rename is reflected everywhere immediately.
+ * read live from the user row (`displayName ?? name ?? "Anon"`, as elsewhere)
+ * rather than denormalized, so a profile rename is reflected everywhere
+ * immediately.
  *
  * `viewerId` is the authenticated viewer (or `null` for guests), resolved once
  * by the caller so ownership can be flagged without re-deriving the identity per
@@ -88,7 +90,7 @@ async function toFeedMeme(
     mediaType: meme.mediaType,
     tags: meme.tags,
     visibility: meme.visibility,
-    authorName: author?.name ?? "Anon",
+    authorName: author?.displayName ?? author?.name ?? "Anon",
     isOwner: viewerId !== null && meme.authorId === viewerId,
     upvoteCount: meme.upvoteCount,
     downvoteCount: meme.downvoteCount,

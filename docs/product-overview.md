@@ -74,7 +74,8 @@ The product should let guests browse public content immediately, let authenticat
 - Authenticated users can upload memes.
 - Authenticated users can edit metadata for their own memes.
 - Authenticated users can delete their own memes.
-- Users can edit their profile.
+- Users can edit their profile display name from the settings page; other
+  profile fields (email, avatar) stay managed by the auth provider.
 
 ## Visibility, lifecycle, and moderation
 

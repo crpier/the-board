@@ -9,6 +9,11 @@ export default defineSchema({
   ...authTables,
   users: defineTable({
     name: v.optional(v.string()),
+    // User-set display-name override. `name` stays OAuth-managed — the auth
+    // provider rewrites it from the Google profile on every sign-in — so a
+    // user-chosen name must live in its own field (ADR 0011). Display
+    // resolution everywhere is `displayName ?? name ?? "Anon"`.
+    displayName: v.optional(v.string()),
     image: v.optional(v.string()),
     email: v.optional(v.string()),
     emailVerificationTime: v.optional(v.number()),
@@ -41,8 +46,9 @@ export default defineSchema({
     mediaKey: v.string(),
     mediaType: mediaTypeValidator,
     tags: v.array(v.string()),
-    // Authoritative author reference. Display name is resolved live from
-    // `users.name` at read time, never denormalized onto the meme.
+    // Authoritative author reference. Display name is resolved live from the
+    // user row (`displayName ?? name`) at read time, never denormalized onto
+    // the meme.
     authorId: v.id("users"),
     upvoteCount: v.number(),
     downvoteCount: v.number(),

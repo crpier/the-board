@@ -40,7 +40,13 @@ export default function Navbar() {
             </a>
             <Show when={viewer.data()}>
               {(user) => (
-                <div class="flex items-center gap-2">
+                // The avatar + name doubles as the entry point to profile
+                // settings — no separate nav item needed.
+                <A
+                  href="/settings"
+                  class="flex items-center gap-2 transition-colors hover:text-[#63e6be]"
+                  title="Settings"
+                >
                   <Show
                     when={user().avatarUrl}
                     fallback={
@@ -58,7 +64,7 @@ export default function Navbar() {
                     )}
                   </Show>
                   <span class="text-sm">{user().displayName}</span>
-                </div>
+                </A>
               )}
             </Show>
             <button onClick={() => void auth.signOut()}>Sign out</button>
