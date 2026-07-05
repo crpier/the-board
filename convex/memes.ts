@@ -40,6 +40,10 @@ const feedMemeValidator = v.object({
   // from `authorId === getAuthUserId` so the raw `authorId` never leaves the
   // query (ADR 0006) while the client can still gate owner-only controls.
   isOwner: v.boolean(),
+  // True when the viewer is an admin (#56). Purely a UI gate for the moderation
+  // control on cards — it never widens which memes a query returns, and the
+  // server re-checks admin status inside `moderateMeme`.
+  canModerate: v.boolean(),
   upvoteCount: v.number(),
   downvoteCount: v.number(),
 });
@@ -72,14 +76,14 @@ const feedPageValidator = v.object({
  * rather than denormalized, so a profile rename is reflected everywhere
  * immediately.
  *
- * `viewerId` is the authenticated viewer (or `null` for guests), resolved once
- * by the caller so ownership can be flagged without re-deriving the identity per
- * meme.
+ * `viewer` is the authenticated viewer's id and admin flag (or `null` viewerId
+ * for guests), resolved once by the caller (`getViewer`) so neither the identity
+ * nor the admin lookup is re-derived per meme.
  */
 async function toFeedMeme(
   ctx: QueryCtx,
   meme: Doc<"memes">,
-  viewerId: Id<"users"> | null,
+  viewer: Viewer,
 ): Promise<FeedMeme> {
   const author = await ctx.db.get(meme.authorId);
   return {
@@ -91,10 +95,29 @@ async function toFeedMeme(
     tags: meme.tags,
     visibility: meme.visibility,
     authorName: author?.displayName ?? author?.name ?? "Anon",
-    isOwner: viewerId !== null && meme.authorId === viewerId,
+    isOwner: viewer.viewerId !== null && meme.authorId === viewer.viewerId,
+    canModerate: viewer.isAdmin,
     upvoteCount: meme.upvoteCount,
     downvoteCount: meme.downvoteCount,
   };
+}
+
+/** The per-request viewer context shared by the feed-shaped queries. */
+type Viewer = { viewerId: Id<"users"> | null; isAdmin: boolean };
+
+/**
+ * Resolve the requesting viewer once per query: their user id (or `null` for
+ * guests) plus whether their user doc carries `isAdmin === true` (same read as
+ * `viewer.current`). Admin status only feeds the `canModerate` UI flag and the
+ * `moderateMeme` gate — it never changes which memes a query returns.
+ */
+async function getViewer(ctx: QueryCtx): Promise<Viewer> {
+  const viewerId = await getAuthUserId(ctx);
+  if (viewerId === null) {
+    return { viewerId: null, isAdmin: false };
+  }
+  const user = await ctx.db.get(viewerId);
+  return { viewerId, isAdmin: user?.isAdmin === true };
 }
 
 export const listPublicMemes = query({
@@ -102,7 +125,7 @@ export const listPublicMemes = query({
   // Pins the page shape to the view-model so raw FKs can't reach the client.
   returns: feedPageValidator,
   handler: async (ctx, args) => {
-    const viewerId = await getAuthUserId(ctx);
+    const viewer = await getViewer(ctx);
     const result = await ctx.db
       .query("memes")
       .withIndex("by_visibility_and_status", (q) =>
@@ -114,7 +137,7 @@ export const listPublicMemes = query({
     return {
       ...result,
       page: await Promise.all(
-        result.page.map((meme) => toFeedMeme(ctx, meme, viewerId)),
+        result.page.map((meme) => toFeedMeme(ctx, meme, viewer)),
       ),
     };
   },
@@ -131,8 +154,8 @@ export const listPublicMemes = query({
  * error: `normalizeId` returns `null` for anything that isn't a valid id for this
  * table.
  *
- * Authorization matrix (no admin special-casing — that's deferred to
- * Moderation):
+ * Authorization matrix (no admin special-casing — admins get no special detail
+ * access; `moderateMeme` only reaches memes an admin can already see):
  *   - Only `ready` memes are ever visible; `deleted` and every non-`ready`
  *     status resolve to `null` for everyone.
  *   - A `public` ready meme is visible to everyone (guest, non-owner, owner).
@@ -158,14 +181,17 @@ export const getMeme = query({
       return null;
     }
 
-    const viewerId = await getAuthUserId(ctx);
-    const isOwner = viewerId !== null && meme.authorId === viewerId;
-    // A private meme is owner-only; public ready memes are open to all.
+    const viewer = await getViewer(ctx);
+    const isOwner =
+      viewer.viewerId !== null && meme.authorId === viewer.viewerId;
+    // A private meme is owner-only; public ready memes are open to all. Admins
+    // get no special detail access (product overview) — `viewer.isAdmin` only
+    // feeds the `canModerate` flag on memes the viewer could already see.
     if (meme.visibility !== "public" && !isOwner) {
       return null;
     }
 
-    return await toFeedMeme(ctx, meme, viewerId);
+    return await toFeedMeme(ctx, meme, viewer);
   },
 });
 
@@ -198,7 +224,7 @@ export const searchMemes = query({
       return { page: [], isDone: true, continueCursor: "" };
     }
 
-    const viewerId = await getAuthUserId(ctx);
+    const viewer = await getViewer(ctx);
     const result = await ctx.db
       .query("memes")
       .withSearchIndex("search_searchText", (q) => {
@@ -215,7 +241,7 @@ export const searchMemes = query({
     return {
       ...result,
       page: await Promise.all(
-        result.page.map((meme) => toFeedMeme(ctx, meme, viewerId)),
+        result.page.map((meme) => toFeedMeme(ctx, meme, viewer)),
       ),
     };
   },
@@ -451,6 +477,34 @@ export const updateMeme = mutation({
       // Recompute so the edited title/tags are immediately searchable.
       searchText: buildSearchText(title, tags),
     });
+    return null;
+  },
+});
+
+/**
+ * Admin-only moderation (#56, ADR 0012): change any meme's visibility,
+ * regardless of ownership. This is the whole moderation surface — no separate
+ * console, no other fields.
+ *
+ * Denial shape: every failure — guest, non-admin, missing meme, tombstoned
+ * meme — throws the same opaque "Meme not found." used by `requireOwnedMeme`,
+ * so the mutation never confirms to a non-admin that a meme id exists. Admins
+ * may moderate their own memes too; there is no owner exclusion here.
+ */
+export const moderateMeme = mutation({
+  args: { memeId: v.id("memes"), visibility: visibilityValidator },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const viewer = await getViewer(ctx);
+    if (!viewer.isAdmin) {
+      throw new Error("Meme not found.");
+    }
+    const meme = await ctx.db.get(args.memeId);
+    // A tombstoned meme is gone for moderation purposes, same as everywhere.
+    if (meme === null || meme.status === "deleted") {
+      throw new Error("Meme not found.");
+    }
+    await ctx.db.patch(args.memeId, { visibility: args.visibility });
     return null;
   },
 });
