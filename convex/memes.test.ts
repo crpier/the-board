@@ -882,6 +882,160 @@ describe("updateMeme", () => {
   });
 });
 
+describe("moderateMeme", () => {
+  // The canModerate assertions go through the feed/detail queries, which
+  // resolve media URLs and therefore need the CDN base set.
+  const prev = process.env.R2_PUBLIC_URL;
+
+  beforeEach(() => {
+    process.env.R2_PUBLIC_URL = "https://media.example.com";
+  });
+
+  afterEach(() => {
+    process.env.R2_PUBLIC_URL = prev;
+  });
+
+  function getMeme(t: ReturnType<typeof convexTest>, memeId: Id<"memes">) {
+    return t.run(async (ctx) => ctx.db.get(memeId));
+  }
+
+  /** A user with `isAdmin: true`, distinct from the seeded meme's author. */
+  function seedAdmin(t: ReturnType<typeof convexTest>) {
+    return t.run(async (ctx) =>
+      ctx.db.insert("users", { name: "Admin", isAdmin: true }),
+    );
+  }
+
+  test("an admin flips another user's meme public → private", async () => {
+    const t = convexTest(schema, modules);
+    const { memeId } = await seedMeme(t, { visibility: "public" });
+    const adminId = await seedAdmin(t);
+    const asAdmin = t.withIdentity({ subject: `${adminId}|session` });
+
+    await asAdmin.mutation(api.memes.moderateMeme, {
+      memeId,
+      visibility: "private",
+    });
+
+    expect((await getMeme(t, memeId))?.visibility).toBe("private");
+  });
+
+  test("an admin flips another user's meme private → public", async () => {
+    const t = convexTest(schema, modules);
+    const { memeId } = await seedMeme(t, { visibility: "private" });
+    const adminId = await seedAdmin(t);
+    const asAdmin = t.withIdentity({ subject: `${adminId}|session` });
+
+    await asAdmin.mutation(api.memes.moderateMeme, {
+      memeId,
+      visibility: "public",
+    });
+
+    expect((await getMeme(t, memeId))?.visibility).toBe("public");
+  });
+
+  test("rejects a non-admin with the opaque not-found and leaves the meme unchanged", async () => {
+    const t = convexTest(schema, modules);
+    const { memeId } = await seedMeme(t, { visibility: "public" });
+    const plebId = await t.run(async (ctx) =>
+      ctx.db.insert("users", { name: "Regular" }),
+    );
+    const asPleb = t.withIdentity({ subject: `${plebId}|session` });
+
+    // Same opaque message as a genuinely missing meme, so a non-admin can't
+    // probe whether an id exists.
+    await expect(
+      asPleb.mutation(api.memes.moderateMeme, {
+        memeId,
+        visibility: "private",
+      }),
+    ).rejects.toThrow("Meme not found.");
+
+    expect((await getMeme(t, memeId))?.visibility).toBe("public");
+  });
+
+  test("rejects a guest with the same opaque not-found", async () => {
+    const t = convexTest(schema, modules);
+    const { memeId } = await seedMeme(t, { visibility: "public" });
+
+    await expect(
+      t.mutation(api.memes.moderateMeme, { memeId, visibility: "private" }),
+    ).rejects.toThrow("Meme not found.");
+
+    expect((await getMeme(t, memeId))?.visibility).toBe("public");
+  });
+
+  test("rejects moderating a deleted meme with the same opaque not-found", async () => {
+    const t = convexTest(schema, modules);
+    const { memeId } = await seedMeme(t, { status: "deleted" });
+    const adminId = await seedAdmin(t);
+    const asAdmin = t.withIdentity({ subject: `${adminId}|session` });
+
+    await expect(
+      asAdmin.mutation(api.memes.moderateMeme, {
+        memeId,
+        visibility: "private",
+      }),
+    ).rejects.toThrow("Meme not found.");
+  });
+
+  test("an admin can moderate their own meme (no owner exclusion server-side)", async () => {
+    const t = convexTest(schema, modules);
+    const adminId = await seedAdmin(t);
+    const { memeId } = await seedMeme(t, { authorId: adminId });
+    const asAdmin = t.withIdentity({ subject: `${adminId}|session` });
+
+    await asAdmin.mutation(api.memes.moderateMeme, {
+      memeId,
+      visibility: "private",
+    });
+
+    expect((await getMeme(t, memeId))?.visibility).toBe("private");
+  });
+
+  test("canModerate is flagged for admins only in the feed view-model", async () => {
+    const t = convexTest(schema, modules);
+    await seedMeme(t);
+    const adminId = await seedAdmin(t);
+    const plebId = await t.run(async (ctx) =>
+      ctx.db.insert("users", { name: "Regular" }),
+    );
+
+    const asAdmin = t.withIdentity({ subject: `${adminId}|session` });
+    const asPleb = t.withIdentity({ subject: `${plebId}|session` });
+
+    expect(
+      (await asAdmin.query(api.memes.listPublicMemes, firstPage)).page[0]
+        .canModerate,
+    ).toBe(true);
+    expect(
+      (await asPleb.query(api.memes.listPublicMemes, firstPage)).page[0]
+        .canModerate,
+    ).toBe(false);
+    // Guests can never moderate.
+    expect(
+      (await t.query(api.memes.listPublicMemes, firstPage)).page[0].canModerate,
+    ).toBe(false);
+  });
+
+  test("canModerate is flagged on the detail query without widening access", async () => {
+    const t = convexTest(schema, modules);
+    const { memeId } = await seedMeme(t);
+    const privateMeme = await seedMeme(t, { visibility: "private" });
+    const adminId = await seedAdmin(t);
+    const asAdmin = t.withIdentity({ subject: `${adminId}|session` });
+
+    const meme = await asAdmin.query(api.memes.getMeme, { id: memeId });
+    expect(meme?.canModerate).toBe(true);
+
+    // Another user's private meme stays not-found even for an admin — the flag
+    // never grants special detail access (product overview).
+    expect(
+      await asAdmin.query(api.memes.getMeme, { id: privateMeme.memeId }),
+    ).toBeNull();
+  });
+});
+
 describe("deleteMeme", () => {
   /**
    * Stand up an instance with the R2 component mounted (and the action-retrier

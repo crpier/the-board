@@ -13,3 +13,4 @@ One file per decision. Numbered sequentially; supersede rather than rewrite past
 - [0009 - Owner Edit and Soft-Delete with R2 Reclamation](0009-owner-edit-and-soft-delete.md)
 - [0010 - Single-Mode Relevance Search with Denormalized `searchText`](0010-single-mode-relevance-search.md)
 - [0011 - User-Set Display Name as an Override Field](0011-user-set-display-name-override.md)
+- [0012 - Admin Moderation as a Visibility Mutation in the Normal UI](0012-admin-moderation-via-visibility-mutation.md)

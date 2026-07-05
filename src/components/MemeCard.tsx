@@ -2,6 +2,7 @@ import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import type { FeedMeme } from "@convex/memes";
 import { A } from "@solidjs/router";
+import { Shield } from "lucide-solid";
 import { For, Show, createSignal, untrack } from "solid-js";
 import {
   differenceInMinutes,
@@ -124,6 +125,13 @@ export function MemeCard(props: {
             />
           </Show>
 
+          {/* Admin moderation: visibility toggle on someone else's meme (#56).
+              Owners moderate their own memes through the regular edit form, so
+              the control is hidden for them to avoid two visibility toggles. */}
+          <Show when={props.meme.canModerate && !props.meme.isOwner}>
+            <ModerationControls meme={props.meme} />
+          </Show>
+
           {/* Author (inert) + time permalink — pushed to the right */}
           <span class="ml-auto text-[11px] text-[#6a6a7e]">
             @{props.meme.authorName} &middot;{" "}
@@ -184,6 +192,63 @@ function OwnerControls(props: {
       >
         {deleteMeme.isLoading() ? "Deleting…" : "Delete"}
       </button>
+      <Show when={error()}>
+        {(message) => <span class="text-[#ff8787]">{message()}</span>}
+      </Show>
+    </div>
+  );
+}
+
+/**
+ * Admin-only visibility toggle, rendered on memes the viewer doesn't own when
+ * the server-computed `canModerate` flag is set (#56). The shield icon marks it
+ * as a moderation action, distinct from the owner's edit controls. The pressed
+ * state reads `props.meme.visibility` directly — the reactive query is the
+ * source of truth, so a successful flip updates it (and, in the public feed,
+ * drops the now-private card) without local state.
+ */
+function ModerationControls(props: { meme: Meme }) {
+  const moderateMeme = useMutation(api.memes.moderateMeme);
+  const [error, setError] = createSignal<string | null>(null);
+
+  async function onModerate(visibility: Visibility) {
+    if (moderateMeme.isLoading() || visibility === props.meme.visibility)
+      return;
+    setError(null);
+    try {
+      await moderateMeme.mutate({ memeId: props.meme._id, visibility });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Moderation failed.");
+    }
+  }
+
+  return (
+    <div class="flex items-center gap-1.5 text-[11px]">
+      {/* Decorative shield; the group's aria-label carries the meaning. */}
+      <Shield class="h-3.5 w-3.5 text-[#ffd43b]" aria-hidden="true" />
+      <div
+        class="inline-flex rounded-md border border-[#ffd43b]/25 p-0.5"
+        role="group"
+        aria-label="Moderation: visibility"
+      >
+        <For each={["public", "private"] as const}>
+          {(option) => (
+            <button
+              type="button"
+              aria-pressed={props.meme.visibility === option}
+              disabled={moderateMeme.isLoading()}
+              onClick={() => void onModerate(option)}
+              class={`rounded px-2 py-0.5 text-[11px] font-bold capitalize transition disabled:opacity-50 ${
+                props.meme.visibility === option
+                  ? "bg-[#ffd43b]/10 text-[#ffd43b]"
+                  : "text-[#5a5a6e] hover:text-[#ffd43b]"
+              }`}
+            >
+              {option}
+            </button>
+          )}
+        </For>
+      </div>
       <Show when={error()}>
         {(message) => <span class="text-[#ff8787]">{message()}</span>}
       </Show>
