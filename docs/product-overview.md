@@ -48,8 +48,12 @@ The product should let guests browse public content immediately, let authenticat
 - Guests can browse public memes without an account.
 - Public meme browsing centers on a reverse-chronological feed.
 - A meme detail page exists as the canonical destination for an individual meme.
-- The feed links out to that detail page through each card's timestamp and title;
-  media and author are not the link target.
+- The feed links out to the meme detail page through each card's timestamp and title;
+  media is not the link target.
+- Each post's author name links to that author's profile page.
+- A profile page shows that user's ready posts in reverse-chronological publish
+  order. Other viewers see only public posts; the profile owner also sees their
+  own private ready posts.
 - The nav has a plain link to the search page; search is open to everyone.
 - Anyone — signed in or not — can search public, ready memes by a query that
   matches a meme's title and its tags together, ranked by relevance.

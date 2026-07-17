@@ -95,7 +95,7 @@ export function MemeCard(props: {
                 // A tag is a search term: clicking it runs `/search?q=<tag>`.
                 // The card is shared, so this makes tags clickable in the feed,
                 // detail, and results at once; in results the URL `q` change
-                // just re-runs the search. Author stays inert (profiles deferred).
+                // just re-runs the search.
                 <A
                   href={`/search?q=${encodeURIComponent(tag)}`}
                   class="text-xs text-[#5a5a6e] transition-colors hover:text-[#63e6be]"
@@ -132,9 +132,15 @@ export function MemeCard(props: {
             <ModerationControls meme={props.meme} />
           </Show>
 
-          {/* Author (inert) + time permalink — pushed to the right */}
+          {/* Author profile + time permalink — pushed to the right */}
           <span class="ml-auto text-[11px] text-[#6a6a7e]">
-            @{props.meme.authorName} &middot;{" "}
+            <A
+              href={props.meme.authorProfileHref}
+              class="transition-colors hover:text-[#63e6be]"
+            >
+              @{props.meme.authorName}
+            </A>{" "}
+            &middot;{" "}
             <A
               href={detailHref()}
               class="transition-colors hover:text-[#63e6be]"
