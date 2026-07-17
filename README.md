@@ -54,4 +54,8 @@ It is intentionally lightweight, so the focus stays on clean vertical slices, wo
 - Local uploads require the R2 bucket CORS policy to allow the app origin
   (normally `http://localhost:5000`), `PUT`, and the `Content-Type` header; see
   `docs/adr/0005-r2-object-storage-for-meme-media.md`.
+- Set the `APP_URL` Convex deployment variable to the app's real origin
+  (`npx convex env set APP_URL https://<your-domain>`) so shared meme links
+  redirect correctly; see `docs/adr/0015-convex-http-action-for-og-unfurls.md`.
+  Defaults to `http://localhost:5000` if unset.
 - This project was created with the [Solid CLI](https://github.com/solidjs-community/solid-cli).
