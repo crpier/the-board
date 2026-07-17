@@ -38,6 +38,17 @@ export default function Navbar() {
             >
               Upload
             </a>
+            {/* Admin-only entry point to the review queue (#67). Hidden for
+                everyone else — `/admin` itself re-checks admin status
+                server-side, so this is discoverability, not the gate. */}
+            <Show when={viewer.data()?.isAdmin}>
+              <A
+                href="/admin"
+                class="text-sm text-[#ffd43b] transition-colors hover:text-[#ffd43b]/80"
+              >
+                Admin
+              </A>
+            </Show>
             <Show when={viewer.data()}>
               {(user) => (
                 // The avatar + name doubles as the entry point to profile

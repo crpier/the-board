@@ -5,6 +5,7 @@ import { type Infer, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
+  type MutationCtx,
   type QueryCtx,
   action,
   internalMutation,
@@ -14,6 +15,7 @@ import {
 import { MEDIA_LIMITS, MEGABYTE, classifyMedia } from "./media";
 import { r2, resolveUrl } from "./r2";
 import { mediaTypeValidator, visibilityValidator } from "./validators";
+import { type Viewer, getViewer } from "./viewer";
 
 /**
  * A feed-ready meme: every foreign key resolved so the client renders straight
@@ -102,24 +104,6 @@ async function toFeedMeme(
     upvoteCount: meme.upvoteCount,
     downvoteCount: meme.downvoteCount,
   };
-}
-
-/** The per-request viewer context shared by the feed-shaped queries. */
-type Viewer = { viewerId: Id<"users"> | null; isAdmin: boolean };
-
-/**
- * Resolve the requesting viewer once per query: their user id (or `null` for
- * guests) plus whether their user doc carries `isAdmin === true` (same read as
- * `viewer.current`). Admin status only feeds the `canModerate` UI flag and the
- * `moderateMeme` gate — it never changes which memes a query returns.
- */
-async function getViewer(ctx: QueryCtx): Promise<Viewer> {
-  const viewerId = await getAuthUserId(ctx);
-  if (viewerId === null) {
-    return { viewerId: null, isAdmin: false };
-  }
-  const user = await ctx.db.get(viewerId);
-  return { viewerId, isAdmin: user?.isAdmin === true };
 }
 
 export const listPublicMemes = query({
@@ -547,9 +531,35 @@ export const updateMeme = mutation({
 });
 
 /**
+ * The shared core of every admin visibility change: patch `visibility` on a
+ * meme that's still live, no-op on a missing/tombstoned one. Callers own the
+ * admin gate — this only applies the write.
+ *
+ * Pulled out so `moderateMeme` (#56, ADR 0012) and the admin report queue's
+ * "hide" resolution (`reports.resolveReport`, #67) share one apply step
+ * instead of the queue re-deriving the same patch, per the guideline to pull
+ * shared write logic into a plain helper rather than chaining
+ * `ctx.runMutation` calls across a transaction.
+ */
+export async function applyModerationVisibility(
+  ctx: MutationCtx,
+  memeId: Id<"memes">,
+  visibility: Doc<"memes">["visibility"],
+): Promise<boolean> {
+  const meme = await ctx.db.get(memeId);
+  // A tombstoned meme is gone for moderation purposes, same as everywhere.
+  if (meme === null || meme.status === "deleted") {
+    return false;
+  }
+  await ctx.db.patch(memeId, { visibility });
+  return true;
+}
+
+/**
  * Admin-only moderation (#56, ADR 0012): change any meme's visibility,
- * regardless of ownership. This is the whole moderation surface — no separate
- * console, no other fields.
+ * regardless of ownership. This is the whole moderation surface reachable
+ * from a meme card — the admin report queue (#67) is a second entry point
+ * onto the same `applyModerationVisibility` core.
  *
  * Denial shape: every failure — guest, non-admin, missing meme, tombstoned
  * meme — throws the same opaque "Meme not found." used by `requireOwnedMeme`,
@@ -564,12 +574,14 @@ export const moderateMeme = mutation({
     if (!viewer.isAdmin) {
       throw new Error("Meme not found.");
     }
-    const meme = await ctx.db.get(args.memeId);
-    // A tombstoned meme is gone for moderation purposes, same as everywhere.
-    if (meme === null || meme.status === "deleted") {
+    const applied = await applyModerationVisibility(
+      ctx,
+      args.memeId,
+      args.visibility,
+    );
+    if (!applied) {
       throw new Error("Meme not found.");
     }
-    await ctx.db.patch(args.memeId, { visibility: args.visibility });
     return null;
   },
 });

@@ -1,8 +1,9 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import type { FeedMeme } from "@convex/memes";
+import type { ReportReason } from "@convex/validators";
 import { A } from "@solidjs/router";
-import { Shield } from "lucide-solid";
+import { Flag, Shield } from "lucide-solid";
 import { For, Show, createSignal, untrack } from "solid-js";
 import {
   differenceInMinutes,
@@ -10,7 +11,8 @@ import {
   differenceInDays,
 } from "date-fns";
 import { VoteControl } from "~/components/VoteControl";
-import { useAction, useMutation } from "~/lib/convex-solid";
+import { useConvexAuth } from "~/lib/convex-auth-solid";
+import { useAction, useMutation, useQuery } from "~/lib/convex-solid";
 
 type Meme = FeedMeme;
 type Visibility = FeedMeme["visibility"];
@@ -46,6 +48,7 @@ export function MemeCard(props: {
   onDeleted?: (id: Id<"memes">) => void;
 }) {
   const [editing, setEditing] = createSignal(false);
+  const [reporting, setReporting] = createSignal(false);
   const detailHref = () => `/meme/${props.meme._id}`;
 
   return (
@@ -132,6 +135,16 @@ export function MemeCard(props: {
             <ModerationControls meme={props.meme} />
           </Show>
 
+          {/* Report: signed-in non-owners only (#67). Owners already control
+              their own memes; reporting your own post isn't a real flow. */}
+          <Show when={!props.meme.isOwner}>
+            <ReportButton
+              meme={props.meme}
+              reporting={reporting()}
+              onReport={() => setReporting(true)}
+            />
+          </Show>
+
           {/* Author profile + time permalink — pushed to the right when the row
               fits on one line, wraps onto its own line (and breaks long
               usernames) otherwise so it can never force horizontal scroll */}
@@ -155,6 +168,11 @@ export function MemeCard(props: {
         {/* Inline edit form */}
         <Show when={props.meme.isOwner && editing()}>
           <EditForm meme={props.meme} onClose={() => setEditing(false)} />
+        </Show>
+
+        {/* Inline report form */}
+        <Show when={!props.meme.isOwner && reporting()}>
+          <ReportForm meme={props.meme} onClose={() => setReporting(false)} />
         </Show>
       </div>
     </article>
@@ -261,6 +279,155 @@ function ModerationControls(props: { meme: Meme }) {
         {(message) => <span class="text-[#ff8787]">{message()}</span>}
       </Show>
     </div>
+  );
+}
+
+const REPORT_REASONS: { value: ReportReason; label: string }[] = [
+  { value: "spam", label: "Spam" },
+  { value: "harassment", label: "Harassment" },
+  { value: "hate_speech", label: "Hate speech" },
+  { value: "illegal_content", label: "Illegal content" },
+  { value: "other", label: "Other" },
+];
+
+/**
+ * The report entry point on a card: a small flag button that opens
+ * `ReportForm` below the footer (#67), mirroring `OwnerControls`' edit
+ * button. Signed-out viewers see nothing — unlike voting, there's no
+ * disabled-with-tooltip state, since reporting isn't a core browsing action
+ * worth advertising to guests.
+ *
+ * Reads `reports.myReportStatus` to disable itself (and relabel to
+ * "Reported") once the viewer already has an open report on this meme —
+ * the same read-your-own-state shape `VoteControl` uses for `myVote`. This
+ * is a UX nicety only; `createReport` re-enforces the same rule server-side.
+ */
+function ReportButton(props: {
+  meme: Meme;
+  reporting: boolean;
+  onReport: () => void;
+}) {
+  const auth = useConvexAuth()!;
+  const status = useQuery(
+    api.reports.myReportStatus,
+    () => ({ memeId: props.meme._id }),
+    () => ({ enabled: auth.isAuthenticated() }),
+  );
+  const alreadyReported = () => status.data() === "open";
+
+  return (
+    <Show when={auth.isAuthenticated()}>
+      <button
+        type="button"
+        disabled={props.reporting || alreadyReported()}
+        title={
+          alreadyReported()
+            ? "You already reported this meme"
+            : "Report this meme"
+        }
+        onClick={() => props.onReport()}
+        class="flex items-center gap-1 text-[11px] text-[#6a6a7e] transition-colors hover:text-[#ff8787] disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        <Flag class="h-3.5 w-3.5" aria-hidden="true" />
+        {alreadyReported() ? "Reported" : "Report"}
+      </button>
+    </Show>
+  );
+}
+
+/**
+ * The reason + optional-details form a report button expands into. Submits
+ * `reports.createReport`; a duplicate-open-report attempt surfaces the
+ * server's message inline rather than being pre-empted client-side, since
+ * `myReportStatus` (driving the button's disabled state) can be a beat stale.
+ */
+function ReportForm(props: { meme: Meme; onClose: () => void }) {
+  const createReport = useMutation(api.reports.createReport);
+  const [reason, setReason] = createSignal<ReportReason>("spam");
+  const [details, setDetails] = createSignal("");
+  const [error, setError] = createSignal<string | null>(null);
+
+  async function onSubmit(event: SubmitEvent) {
+    event.preventDefault();
+    if (createReport.isLoading()) return;
+    setError(null);
+    try {
+      await createReport.mutate({
+        memeId: props.meme._id,
+        reason: reason(),
+        details: details().trim() || undefined,
+      });
+      props.onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Report failed.");
+    }
+  }
+
+  return (
+    <form
+      class="space-y-3 rounded-xl border border-[#ff8787]/20 p-3"
+      onSubmit={onSubmit}
+    >
+      <div>
+        <label
+          for={`report-reason-${props.meme._id}`}
+          class="mb-1 block text-xs text-[#5a5a6e]"
+        >
+          Reason
+        </label>
+        <select
+          id={`report-reason-${props.meme._id}`}
+          value={reason()}
+          disabled={createReport.isLoading()}
+          onChange={(e) => setReason(e.currentTarget.value as ReportReason)}
+          class="w-full rounded-lg border border-white/10 bg-transparent px-3 py-2 text-sm outline-none focus:border-[#ff8787]/40"
+        >
+          <For each={REPORT_REASONS}>
+            {(option) => <option value={option.value}>{option.label}</option>}
+          </For>
+        </select>
+      </div>
+
+      <div>
+        <label
+          for={`report-details-${props.meme._id}`}
+          class="mb-1 block text-xs text-[#5a5a6e]"
+        >
+          Details <span class="text-[#5a5a6e]/60">(optional)</span>
+        </label>
+        <textarea
+          id={`report-details-${props.meme._id}`}
+          value={details()}
+          rows={2}
+          disabled={createReport.isLoading()}
+          onInput={(e) => setDetails(e.currentTarget.value)}
+          placeholder="Anything that helps a reviewer understand the issue"
+          class="w-full rounded-lg border border-white/10 bg-transparent px-3 py-2 text-sm outline-none placeholder:text-[#5a5a6e]/50 focus:border-[#ff8787]/40"
+        />
+      </div>
+
+      <Show when={error()}>
+        {(message) => <p class="text-xs text-[#ff8787]">{message()}</p>}
+      </Show>
+
+      <div class="flex gap-2">
+        <button
+          type="submit"
+          disabled={createReport.isLoading()}
+          class="rounded-lg border border-[#ff8787]/30 bg-[#ff8787]/10 px-3 py-1.5 text-xs font-bold text-[#ff8787] transition disabled:opacity-50"
+        >
+          {createReport.isLoading() ? "Reporting…" : "Submit report"}
+        </button>
+        <button
+          type="button"
+          disabled={createReport.isLoading()}
+          onClick={() => props.onClose()}
+          class="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-bold text-[#5a5a6e] transition disabled:opacity-50"
+        >
+          Cancel
+        </button>
+      </div>
+    </form>
   );
 }
 
