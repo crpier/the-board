@@ -96,6 +96,18 @@ The product should let guests browse public content immediately, let authenticat
 - Admin moderation stays simple at the product surface: admins change a meme's visibility.
 - AI moderation may run after publish and hide content until an admin restores it.
 
+## House rules
+
+- Users must only post content they have the right to share.
+- Illegal content, harassment, and hate speech are not allowed.
+- Don't spam the feed with duplicate or repeated posts.
+- Admin visibility decisions are final within the product surface.
+- The `/about` page is the canonical place these rules are presented to users.
+- These rules are enforced today only through manual admin visibility
+  moderation; automated duplicate detection and AI moderation are planned
+  (see the Duplicate detection section and Open product questions) and are
+  not yet live, so `/about` must not describe them as active.
+
 ## Duplicate detection
 
 - Duplicate detection is flag-not-block.
