@@ -2,6 +2,7 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 
 import { mutation, query } from "./_generated/server";
+import { rateLimiter } from "./rateLimiter";
 
 /**
  * A cast vote's direction. Shared so `cardState.myVote` and `castVote.value`
@@ -91,6 +92,13 @@ export const castVote = mutation({
     if (userId === null) {
       throw new Error("You must be signed in to vote.");
     }
+
+    // Per-user limit (#69, docs/adr/0013-rate-limiting.md). Checked before the
+    // meme lookup so a rate-limited caller is rejected without spending extra
+    // reads. `throws: true` makes this reject with a `ConvexError` carrying
+    // `{ kind: "RateLimited", name, retryAfter }`, which the client detects
+    // with `isRateLimitError` (see `src/lib/errors.ts`).
+    await rateLimiter.limit(ctx, "castVote", { key: userId, throws: true });
 
     const meme = await ctx.db.get(args.memeId);
     if (

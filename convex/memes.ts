@@ -13,6 +13,7 @@ import {
 } from "./_generated/server";
 import { MEDIA_LIMITS, MEGABYTE, classifyMedia } from "./media";
 import { r2, resolveUrl } from "./r2";
+import { rateLimiter } from "./rateLimiter";
 import { mediaTypeValidator, visibilityValidator } from "./validators";
 
 /**
@@ -375,6 +376,14 @@ export const createMeme = action({
       throw new Error("You must be signed in to publish a meme.");
     }
 
+    // Per-user limit (#69, docs/adr/0013-rate-limiting.md), checked before any
+    // R2 metadata read so a rate-limited caller doesn't spend that work. This
+    // action already runs against a real, previously-uploaded R2 object (the
+    // client uploads bytes first), so rejecting here still leaves that object
+    // orphaned until the caller retries — acceptable, since retrying just
+    // re-runs `createMeme` with the same `key` once the limit clears.
+    await rateLimiter.limit(ctx, "uploadMeme", { key: authorId, throws: true });
+
     // `syncMetadata` (run by the upload flow) persists the object's real
     // content-type and size; read them back as the source of truth.
     const metadata = await r2.getMetadata(ctx, args.key);
@@ -531,7 +540,16 @@ export const updateMeme = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const viewerId = await getAuthUserId(ctx);
-    await requireOwnedMeme(ctx, args.memeId, viewerId);
+    const meme = await requireOwnedMeme(ctx, args.memeId, viewerId);
+
+    // Per-user limit (#69, docs/adr/0013-rate-limiting.md). Checked after
+    // ownership is confirmed, using `meme.authorId` (guaranteed equal to
+    // `viewerId` by `requireOwnedMeme`) so the key is typed as `Id<"users">`
+    // without a redundant null check on `viewerId`.
+    await rateLimiter.limit(ctx, "updateMeme", {
+      key: meme.authorId,
+      throws: true,
+    });
 
     const title = args.title?.trim() || undefined;
     const tags = canonicalizeTags(args.tags);

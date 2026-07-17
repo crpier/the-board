@@ -11,6 +11,7 @@ import {
 } from "date-fns";
 import { VoteControl } from "~/components/VoteControl";
 import { useAction, useMutation } from "~/lib/convex-solid";
+import { friendlyErrorMessage } from "~/lib/errors";
 
 type Meme = FeedMeme;
 type Visibility = FeedMeme["visibility"];
@@ -292,7 +293,7 @@ function EditForm(props: { meme: Meme; onClose: () => void }) {
       });
       props.onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Save failed.");
+      setError(friendlyErrorMessage(err, "Save failed."));
     }
   }
 
