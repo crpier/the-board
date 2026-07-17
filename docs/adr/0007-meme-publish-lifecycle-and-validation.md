@@ -7,8 +7,8 @@ Status: accepted
 
 The Ownership / Uploads epic (#26) publishes a meme from media the browser has
 already uploaded directly to R2 (ADR 0005): the client calls `generateUploadUrl`,
-PUTs the bytes, runs `syncMetadata`, and then asks the backend to create the
-meme from the resulting object `key`. Three forces shape how `createMeme` is
+PUTs the bytes, runs `syncUploadedMetadata`, and then asks the backend to create
+the meme from the resulting object `key`. Three forces shape how `createMeme` is
 built:
 
 - **Single-step publish, async lifecycle.** The product models a `processing`
@@ -40,7 +40,10 @@ transaction, stranding the object. An action is not a single transaction, so it
 runs the delete as its own committed step and then throws — leaving neither a
 meme nor an orphaned object. The action derives `authorId` server-side via
 `getAuthUserId` (never from arguments) and reads the object's content-type and
-size back from the synced R2 metadata as the source of truth.
+size back from the synced R2 metadata as the source of truth. The upload UI uses
+our `syncUploadedMetadata` action rather than the component-generated
+`syncMetadata` mutation because the latter schedules metadata sync
+asynchronously and can race an immediate publish.
 
 ### Validation, then hand off to a transactional insert
 

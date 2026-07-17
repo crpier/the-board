@@ -4,7 +4,12 @@ import { v } from "convex/values";
 
 import { components } from "./_generated/api";
 import type { DataModel } from "./_generated/dataModel";
-import { type QueryCtx, query } from "./_generated/server";
+import {
+  type ActionCtx,
+  type QueryCtx,
+  action,
+  query,
+} from "./_generated/server";
 
 /**
  * R2 object store for meme media (see ADR 0005).
@@ -58,22 +63,23 @@ export const getMediaUrl = query({
  * Require an authenticated user. Upload and delete are participation flows, so
  * guests must not get a presigned URL or be able to remove objects.
  */
-async function requireUser(ctx: QueryCtx) {
+async function requireUser(ctx: QueryCtx | ActionCtx) {
   if (!(await getAuthUserId(ctx))) {
     throw new Error("Not authenticated");
   }
 }
 
 /**
- * Client-facing R2 API, exposed for the `useUploadFile` hook and direct calls:
+ * Client-facing R2 API:
  *
  * - `generateUploadUrl` — presigned PUT URL (auth-gated).
- * - `syncMetadata` — HEAD the object and store content-type + size in Convex.
+ * - `syncMetadata` — component-generated async metadata scheduler, kept for
+ *   low-level/manual use.
  * - `getMetadata` — read the stored content-type + size back.
  * - `deleteObject` — remove the object and its metadata (auth-gated).
  *
- * Object lifecycle (binding key → meme, optimization, publish) is wired in
- * later slices; this slice only moves and serves bytes.
+ * The publish form uses `syncUploadedMetadata` below so metadata is definitely
+ * present before it calls `createMeme`.
  */
 export const { generateUploadUrl, syncMetadata, getMetadata, deleteObject } =
   r2.clientApi<DataModel>({
@@ -84,3 +90,19 @@ export const { generateUploadUrl, syncMetadata, getMetadata, deleteObject } =
       await requireUser(ctx);
     },
   });
+
+/**
+ * Synchronously sync metadata after a browser PUT. The component's generated
+ * `syncMetadata` client mutation schedules the HEAD asynchronously, which races
+ * with our immediate publish step. The upload UI uses this action instead so
+ * `createMeme` can read content-type + size deterministically.
+ */
+export const syncUploadedMetadata = action({
+  args: { key: v.string() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await requireUser(ctx);
+    await r2.syncMetadata(ctx, args.key);
+    return null;
+  },
+});

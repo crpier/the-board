@@ -60,11 +60,19 @@ export function putToR2(
     }
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) resolve();
+      else if (xhr.status === 0) reject(new Error(r2NetworkError()));
       else
         reject(new Error(`Upload failed (${xhr.status} ${xhr.statusText}).`));
     };
-    xhr.onerror = () =>
-      reject(new Error("Upload failed. Check your connection."));
+    xhr.onerror = () => reject(new Error(r2NetworkError()));
     xhr.send(file);
   });
+}
+
+function r2NetworkError(): string {
+  return (
+    "Upload failed before R2 accepted the file. If you're running locally, " +
+    "check that the R2 bucket CORS policy allows this app origin, PUT, and " +
+    "the Content-Type header."
+  );
 }

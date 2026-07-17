@@ -1,7 +1,7 @@
 import { MEGABYTE } from "@convex/media";
-import { describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 
-import { validateFile } from "./upload";
+import { putToR2, validateFile } from "./upload";
 
 /**
  * Build a `File` of an exact byte size without allocating real bytes: the size
@@ -11,6 +11,33 @@ import { validateFile } from "./upload";
 function fakeFile(type: string, size: number): File {
   return new File(["x".repeat(size)], "meme", { type });
 }
+
+const realXhr = globalThis.XMLHttpRequest;
+
+afterEach(() => {
+  globalThis.XMLHttpRequest = realXhr;
+});
+
+describe("putToR2", () => {
+  test("turns browser-level upload failures into an actionable CORS hint", async () => {
+    class FailingXhr {
+      status = 0;
+      statusText = "";
+      upload = {};
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      open = vi.fn();
+      setRequestHeader = vi.fn();
+      send = vi.fn(() => this.onerror?.());
+    }
+
+    globalThis.XMLHttpRequest = FailingXhr as unknown as typeof XMLHttpRequest;
+
+    await expect(
+      putToR2("https://upload.example", fakeFile("image/jpeg", 1)),
+    ).rejects.toThrow(/R2 bucket CORS/);
+  });
+});
 
 describe("validateFile (client gate)", () => {
   test("accepts an image within the limit and resolves its type", () => {

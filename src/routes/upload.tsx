@@ -55,7 +55,7 @@ export default function Upload() {
 
 function UploadForm() {
   const generateUploadUrl = useMutation(api.r2.generateUploadUrl);
-  const syncMetadata = useMutation(api.r2.syncMetadata);
+  const syncUploadedMetadata = useAction(api.r2.syncUploadedMetadata);
   const createMeme = useAction(api.memes.createMeme);
 
   const [file, setFile] = createSignal<File | null>(null);
@@ -118,7 +118,7 @@ function UploadForm() {
     try {
       const { url, key } = await generateUploadUrl.mutate({});
       await putToR2(url, picked, setProgress);
-      await syncMetadata.mutate({ key });
+      await syncUploadedMetadata.mutate({ key });
       await createMeme.mutate({
         key,
         title: title().trim() || undefined,
