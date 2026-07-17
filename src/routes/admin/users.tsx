@@ -14,7 +14,7 @@ const PAGE_SIZE = 20;
  * Admin-only user role management (#68), deliberately isolated on its own
  * route rather than folded into a shared `/admin` landing page — a reports
  * queue is being built at `/admin` in parallel, and this slice has nothing to
- * do with it (ADR 0013). Non-admins (including guests) see the same
+ * do with it (ADR 0016). Non-admins (including guests) see the same
  * not-found treatment as an unknown page; there is no separate "forbidden"
  * state.
  */

@@ -14,4 +14,7 @@ One file per decision. Numbered sequentially; supersede rather than rewrite past
 - [0010 - Single-Mode Relevance Search with Denormalized `searchText`](0010-single-mode-relevance-search.md)
 - [0011 - User-Set Display Name as an Override Field](0011-user-set-display-name-override.md)
 - [0012 - Admin Moderation as a Visibility Mutation in the Normal UI](0012-admin-moderation-via-visibility-mutation.md)
-- [0013 - Admin Role Management via a Dedicated `/admin/users` Route](0013-admin-role-management-route.md)
+- [0013 - Delayed R2 Reclaim and a Delete Undo Window](0013-delayed-r2-reclaim-and-delete-undo-window.md)
+- [0014 - Random Meme Discovery via a Random-Key Index Seek](0014-random-meme-via-random-key-index-seek.md)
+- [0015 - Convex Http Action for Open Graph Unfurls](0015-convex-http-action-for-og-unfurls.md)
+- [0016 - Admin Role Management via a Dedicated `/admin/users` Route](0016-admin-role-management-route.md)
