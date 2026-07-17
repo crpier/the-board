@@ -96,6 +96,15 @@ The product should let guests browse public content immediately, let authenticat
 - Admin moderation stays simple at the product surface: admins change a meme's visibility.
 - AI moderation may run after publish and hide content until an admin restores it.
 
+## House rules
+
+- Users must only post content they have the right to share.
+- Illegal content, harassment, and hate speech are not allowed.
+- Duplicates are flagged for review, not auto-blocked; repeated or
+  bad-faith reposting can still get a meme hidden by an admin.
+- Admin visibility decisions are final within the product surface.
+- The `/about` page is the canonical place these rules are presented to users.
+
 ## Duplicate detection
 
 - Duplicate detection is flag-not-block.
