@@ -55,6 +55,12 @@ export default defineSchema({
   })
     .index("by_visibility_and_status", ["visibility", "status"])
     .index("by_author", ["authorId"])
+    .index("by_author_and_status", ["authorId", "status"])
+    .index("by_author_and_visibility_and_status", [
+      "authorId",
+      "visibility",
+      "status",
+    ])
     // Single search index backing `/search` (ADR 0010). `mediaType` is the one
     // refinement filter; `visibility`/`status` are pinned to public+ready for
     // every viewer so private/non-ready memes never surface.

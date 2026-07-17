@@ -36,6 +36,7 @@ const feedMemeValidator = v.object({
   // serves owner-facing surfaces without a second read.
   visibility: visibilityValidator,
   authorName: v.string(),
+  authorProfileHref: v.string(),
   // True when the requesting viewer authored this meme. Computed server-side
   // from `authorId === getAuthUserId` so the raw `authorId` never leaves the
   // query (ADR 0006) while the client can still gate owner-only controls.
@@ -95,6 +96,7 @@ async function toFeedMeme(
     tags: meme.tags,
     visibility: meme.visibility,
     authorName: author?.displayName ?? author?.name ?? "Anon",
+    authorProfileHref: `/profile/${meme.authorId}`,
     isOwner: viewer.viewerId !== null && meme.authorId === viewer.viewerId,
     canModerate: viewer.isAdmin,
     upvoteCount: meme.upvoteCount,
@@ -211,6 +213,69 @@ export const getMeme = query({
  * running an empty search (a Convex search needs a non-empty term). All
  * narrowing is index-driven — no `.filter()` (Convex guideline).
  */
+export const getProfile = query({
+  args: { profileId: v.string() },
+  returns: v.union(
+    v.object({
+      displayName: v.string(),
+      profileHref: v.string(),
+      isViewer: v.boolean(),
+    }),
+    v.null(),
+  ),
+  handler: async (ctx, args) => {
+    const profileId = ctx.db.normalizeId("users", args.profileId);
+    if (profileId === null) return null;
+    const user = await ctx.db.get(profileId);
+    if (user === null) return null;
+    const viewer = await getViewer(ctx);
+    return {
+      displayName: user.displayName ?? user.name ?? "Anon",
+      profileHref: `/profile/${profileId}`,
+      isViewer: viewer.viewerId !== null && viewer.viewerId === profileId,
+    };
+  },
+});
+
+export const listProfileMemes = query({
+  args: { profileId: v.string(), paginationOpts: paginationOptsValidator },
+  returns: feedPageValidator,
+  handler: async (ctx, args) => {
+    const authorId = ctx.db.normalizeId("users", args.profileId);
+    if (authorId === null || (await ctx.db.get(authorId)) === null) {
+      return { page: [], isDone: true, continueCursor: "" };
+    }
+
+    const viewer = await getViewer(ctx);
+    const isOwner = viewer.viewerId !== null && viewer.viewerId === authorId;
+    const result = isOwner
+      ? await ctx.db
+          .query("memes")
+          .withIndex("by_author_and_status", (q) =>
+            q.eq("authorId", authorId).eq("status", "ready"),
+          )
+          .order("desc")
+          .paginate(args.paginationOpts)
+      : await ctx.db
+          .query("memes")
+          .withIndex("by_author_and_visibility_and_status", (q) =>
+            q
+              .eq("authorId", authorId)
+              .eq("visibility", "public")
+              .eq("status", "ready"),
+          )
+          .order("desc")
+          .paginate(args.paginationOpts);
+
+    return {
+      ...result,
+      page: await Promise.all(
+        result.page.map((meme) => toFeedMeme(ctx, meme, viewer)),
+      ),
+    };
+  },
+});
+
 export const searchMemes = query({
   args: {
     query: v.string(),

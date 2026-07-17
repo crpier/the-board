@@ -93,13 +93,13 @@ describe("listPublicMemes view-model", () => {
     expect(page[0].authorName).toBe("Anon");
   });
 
-  test("never leaks raw foreign keys to the client", async () => {
+  test("exposes only profile links and media URLs, not raw storage keys", async () => {
     const t = convexTest(schema, modules);
-    await seedMeme(t);
+    const { userId } = await seedMeme(t);
 
     const { page } = await t.query(api.memes.listPublicMemes, firstPage);
-    expect(page[0]).not.toHaveProperty("authorId");
     expect(page[0]).not.toHaveProperty("mediaKey");
+    expect(page[0].authorProfileHref).toBe(`/profile/${userId}`);
   });
 
   test("excludes memes that are not both public and ready", async () => {
@@ -135,6 +135,49 @@ describe("listPublicMemes view-model", () => {
     expect(
       (await t.query(api.memes.listPublicMemes, firstPage)).page[0].isOwner,
     ).toBe(false);
+  });
+});
+
+describe("profile memes", () => {
+  test("lists a user's public ready posts newest first", async () => {
+    const t = convexTest(schema, modules);
+    const { userId } = await seedMeme(t, { title: "older" });
+    await seedMeme(t, { authorId: userId, title: "newer" });
+    await seedMeme(t, {
+      authorId: userId,
+      title: "private",
+      visibility: "private",
+    });
+    await seedMeme(t, {
+      authorId: userId,
+      title: "processing",
+      status: "processing",
+    });
+
+    const { page } = await t.query(api.memes.listProfileMemes, {
+      profileId: userId,
+      ...firstPage,
+    });
+
+    expect(page.map((meme) => meme.title)).toEqual(["newer", "older"]);
+  });
+
+  test("the viewer's own profile includes their private ready posts", async () => {
+    const t = convexTest(schema, modules);
+    const { userId } = await seedMeme(t, { title: "public" });
+    await seedMeme(t, {
+      authorId: userId,
+      title: "private",
+      visibility: "private",
+    });
+    const asOwner = t.withIdentity({ subject: `${userId}|session` });
+
+    const { page } = await asOwner.query(api.memes.listProfileMemes, {
+      profileId: userId,
+      ...firstPage,
+    });
+
+    expect(page.map((meme) => meme.title)).toEqual(["private", "public"]);
   });
 });
 
