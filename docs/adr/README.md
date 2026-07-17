@@ -14,3 +14,4 @@ One file per decision. Numbered sequentially; supersede rather than rewrite past
 - [0010 - Single-Mode Relevance Search with Denormalized `searchText`](0010-single-mode-relevance-search.md)
 - [0011 - User-Set Display Name as an Override Field](0011-user-set-display-name-override.md)
 - [0012 - Admin Moderation as a Visibility Mutation in the Normal UI](0012-admin-moderation-via-visibility-mutation.md)
+- [0013 - Random Meme Discovery via a Random-Key Index Seek](0013-random-meme-via-random-key-index-seek.md)
