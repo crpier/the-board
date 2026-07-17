@@ -28,7 +28,7 @@ import { components } from "./_generated/api";
  *     this leaves room for a user revising a post a few times without
  *     enabling edit-spam (e.g. churning search/tag indexing).
  *
- * See docs/adr/0013-rate-limiting.md for the record of this choice.
+ * See docs/adr/0017-rate-limiting.md for the record of this choice.
  */
 export const rateLimiter = new RateLimiter(components.rateLimiter, {
   uploadMeme: { kind: "token bucket", rate: 10, period: HOUR },

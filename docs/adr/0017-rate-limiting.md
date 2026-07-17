@@ -1,4 +1,4 @@
-# ADR 0013 - Per-User Rate Limiting via the Convex Rate Limiter Component
+# ADR 0017 - Per-User Rate Limiting via the Convex Rate Limiter Component
 
 Date: 2026-07-17
 Status: accepted

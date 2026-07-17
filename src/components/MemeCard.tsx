@@ -9,9 +9,12 @@ import {
   differenceInHours,
   differenceInDays,
 } from "date-fns";
+import { ShareButton } from "~/components/ShareButton";
+import { ConfirmDialog } from "~/components/ConfirmDialog";
 import { VoteControl } from "~/components/VoteControl";
-import { useAction, useMutation } from "~/lib/convex-solid";
+import { useMutation } from "~/lib/convex-solid";
 import { friendlyErrorMessage } from "~/lib/errors";
+import { showUndoToast } from "~/lib/undo-toast";
 
 type Meme = FeedMeme;
 type Visibility = FeedMeme["visibility"];
@@ -116,6 +119,8 @@ export function MemeCard(props: {
             initialDownvoteCount={props.meme.downvoteCount}
           />
 
+          <ShareButton memeId={props.meme._id} title={props.meme.title} />
+
           {/* Owner-only edit/delete, gated on the server-computed flag */}
           <Show when={props.meme.isOwner}>
             <OwnerControls
@@ -168,17 +173,21 @@ function OwnerControls(props: {
   onEdit: () => void;
   onDeleted?: (id: Id<"memes">) => void;
 }) {
-  const deleteMeme = useAction(api.memes.deleteMeme);
+  const deleteMeme = useMutation(api.memes.deleteMeme);
   const [error, setError] = createSignal<string | null>(null);
+  const [confirmOpen, setConfirmOpen] = createSignal(false);
 
-  async function onDelete() {
+  async function onConfirmDelete() {
     if (deleteMeme.isLoading()) return;
-    if (!confirm("Delete this meme? This can't be undone.")) return;
     setError(null);
     try {
       await deleteMeme.mutate({ memeId: props.meme._id });
+      setConfirmOpen(false);
+      // Soft-delete with a 24h undo window (ADR 0013) — offer it right away.
+      showUndoToast(props.meme._id, props.meme.title);
       props.onDeleted?.(props.meme._id);
     } catch (err) {
+      setConfirmOpen(false);
       setError(err instanceof Error ? err.message : "Delete failed.");
     }
   }
@@ -196,7 +205,7 @@ function OwnerControls(props: {
       <button
         type="button"
         disabled={deleteMeme.isLoading()}
-        onClick={() => void onDelete()}
+        onClick={() => setConfirmOpen(true)}
         class="text-[#6a6a7e] transition-colors hover:text-[#ff8787] disabled:opacity-50"
       >
         {deleteMeme.isLoading() ? "Deleting…" : "Delete"}
@@ -204,6 +213,16 @@ function OwnerControls(props: {
       <Show when={error()}>
         {(message) => <span class="text-[#ff8787]">{message()}</span>}
       </Show>
+      <ConfirmDialog
+        open={confirmOpen()}
+        title="Delete this meme?"
+        description="It disappears from the feed right away. You'll get a short window to undo it before it's gone for good."
+        confirmLabel="Delete"
+        danger
+        busy={deleteMeme.isLoading()}
+        onConfirm={() => void onConfirmDelete()}
+        onCancel={() => setConfirmOpen(false)}
+      />
     </div>
   );
 }

@@ -20,7 +20,8 @@ The product should let guests browse public content immediately, let authenticat
 
 - Guest: browses public memes and public meme detail pages.
 - User: browses, votes, uploads, and manages their own memes.
-- Admin: moderates content and reviews system findings without needing a separate admin product surface.
+- Admin: moderates content and reviews system findings mostly through the
+  normal UI, plus manages who else holds the admin role via `/admin/users`.
 
 ## Core experience
 
@@ -65,6 +66,30 @@ The product should let guests browse public content immediately, let authenticat
 - Tags are a discovery tool: a meme's tags are searchable terms, and each tag on
   a card is clickable, running a search (`/search?q=<tag>`) for that tag in the
   feed, on the detail page, and within results alike.
+- The nav also has a "Random" action, open to everyone. Clicking it lands on a
+  random public, ready meme's detail page; repeated clicks vary; a private,
+  hidden, or not-yet-ready meme is never a possible result. If there are no
+  public memes yet, it shows a small inline message instead of navigating
+  (ADR 0014).
+
+### Sharing
+
+- A share/copy-link action is available on both the feed card and the meme
+  detail page. It prefers the OS share sheet (`navigator.share`) when
+  available and otherwise copies the link to the clipboard, with inline
+  "Copied!" feedback.
+- Pasting a meme link into Discord, Slack, WhatsApp, or Twitter unfurls it: a
+  public, ready meme shows its title and image (video memes show title only,
+  no thumbnail); every other case (private, hidden, not-yet-ready, deleted, or
+  an unknown id) unfurls with a generic "The Board" title and no image, never
+  revealing whether the meme exists — the same not-found rule the detail page
+  itself follows.
+- The link a user copies/shares is not the bare app URL: the app is
+  client-side rendered (ADR 0002) and never server-renders `/meme/:id`, so
+  unfurl bots (which fetch a URL but don't run JavaScript) need a
+  server-rendered response elsewhere. That response is served by a Convex http
+  action (ADR 0015); opening the link redirects a human to the real app page
+  immediately.
 
 ### Interaction
 
@@ -77,7 +102,12 @@ The product should let guests browse public content immediately, let authenticat
 
 - Authenticated users can upload memes.
 - Authenticated users can edit metadata for their own memes.
-- Authenticated users can delete their own memes.
+- Authenticated users can delete their own memes. Delete asks for confirmation
+  through an in-app modal, never a browser `confirm()`.
+- A deleted meme is immediately hidden everywhere (feed, profile, search,
+  detail) but stays restorable for a fixed undo window (currently 24 hours)
+  before its media is permanently reclaimed. The owner can undo a delete from
+  the confirmation toast shown right after deleting.
 - Users can edit their profile display name from the settings page; other
   profile fields (email, avatar) stay managed by the auth provider.
 
@@ -131,6 +161,11 @@ The product should let guests browse public content immediately, let authenticat
 - Users can interact with their own content and participate through voting.
 - The first registered user becomes admin automatically.
 - Admins can moderate any meme through visibility changes and review system findings in the normal UI.
+- Admins can promote any user to admin, and demote an admin back to a regular
+  user, from the user role management surface (`/admin/users`).
+- The last remaining admin can't be demoted — enforced server-side, not just
+  hidden in the UI — so the product can never end up with zero admins able to
+  grant admin to anyone else.
 
 ## Rate limiting
 
@@ -138,7 +173,7 @@ The product should let guests browse public content immediately, let authenticat
   account from hammering the backend (scripted spam, vote-brigading, etc.).
 - Limits are generous enough that normal use never hits them: roughly 10
   uploads/hour, 60 votes/minute, and 30 edits/hour (see
-  `docs/adr/0013-rate-limiting.md` for the exact configuration and rationale).
+  `docs/adr/0017-rate-limiting.md` for the exact configuration and rationale).
 - Hitting a limit does not lose the user's input: the form/action stays in
   place and shows a friendly "try again in Xs" message rather than a raw
   error.
@@ -154,7 +189,9 @@ The product should let guests browse public content immediately, let authenticat
 ## Non-goals
 
 - No `special` tier.
-- No separate admin console as a primary product surface.
+- No unified admin dashboard as a primary product surface — admin
+  capabilities live in small, purpose-specific routes (e.g. `/admin/users`
+  for role management) rather than one general-purpose admin console.
 - No comments, reposts, bookmarks, or social-graph features as core requirements.
 - No managed video streaming service as part of the core product.
 - No groups or community segmentation requirements.

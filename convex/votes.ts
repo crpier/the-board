@@ -93,7 +93,7 @@ export const castVote = mutation({
       throw new Error("You must be signed in to vote.");
     }
 
-    // Per-user limit (#69, docs/adr/0013-rate-limiting.md). Checked before the
+    // Per-user limit (#69, docs/adr/0017-rate-limiting.md). Checked before the
     // meme lookup so a rate-limited caller is rejected without spending extra
     // reads. `throws: true` makes this reject with a `ConvexError` carrying
     // `{ kind: "RateLimited", name, retryAfter }`, which the client detects
