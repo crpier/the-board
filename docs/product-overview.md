@@ -66,6 +66,25 @@ The product should let guests browse public content immediately, let authenticat
   a card is clickable, running a search (`/search?q=<tag>`) for that tag in the
   feed, on the detail page, and within results alike.
 
+### Sharing
+
+- A share/copy-link action is available on both the feed card and the meme
+  detail page. It prefers the OS share sheet (`navigator.share`) when
+  available and otherwise copies the link to the clipboard, with inline
+  "Copied!" feedback.
+- Pasting a meme link into Discord, Slack, WhatsApp, or Twitter unfurls it: a
+  public, ready meme shows its title and image (video memes show title only,
+  no thumbnail); every other case (private, hidden, not-yet-ready, deleted, or
+  an unknown id) unfurls with a generic "The Board" title and no image, never
+  revealing whether the meme exists — the same not-found rule the detail page
+  itself follows.
+- The link a user copies/shares is not the bare app URL: the app is
+  client-side rendered (ADR 0002) and never server-renders `/meme/:id`, so
+  unfurl bots (which fetch a URL but don't run JavaScript) need a
+  server-rendered response elsewhere. That response is served by a Convex http
+  action (ADR 0013); opening the link redirects a human to the real app page
+  immediately.
+
 ### Interaction
 
 - Voting requires authentication.

@@ -9,6 +9,7 @@ import {
   differenceInHours,
   differenceInDays,
 } from "date-fns";
+import { ShareButton } from "~/components/ShareButton";
 import { VoteControl } from "~/components/VoteControl";
 import { useAction, useMutation } from "~/lib/convex-solid";
 
@@ -114,6 +115,8 @@ export function MemeCard(props: {
             initialUpvoteCount={props.meme.upvoteCount}
             initialDownvoteCount={props.meme.downvoteCount}
           />
+
+          <ShareButton memeId={props.meme._id} title={props.meme.title} />
 
           {/* Owner-only edit/delete, gated on the server-computed flag */}
           <Show when={props.meme.isOwner}>
