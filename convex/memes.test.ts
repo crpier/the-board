@@ -467,6 +467,9 @@ describe("searchMemes", () => {
 
   test("a freshly published meme is searchable by its title and tags", async () => {
     const t = convexTest(schema, modules);
+    // `insertProcessingMeme` (called below) now checks the `uploadMeme` rate
+    // limit itself (#69, #79), so the component needs to be mounted here too.
+    rateLimiterTest.register(t);
     const userId = await t.run(async (ctx) =>
       ctx.db.insert("users", { name: "Publisher" }),
     );
@@ -585,6 +588,9 @@ describe("backfillSearchText", () => {
 
   test("only backfills rows missing searchText, skipping already-written ones", async () => {
     const t = convexTest(schema, modules);
+    // `insertProcessingMeme` (called below) now checks the `uploadMeme` rate
+    // limit itself (#69, #79), so the component needs to be mounted here too.
+    rateLimiterTest.register(t);
     // Two legacy rows missing the field, plus one already written normally.
     await seedMeme(t, { title: "Legacy one", tags: [] });
     await seedMeme(t, { title: "Legacy two", tags: [] });
@@ -851,6 +857,37 @@ describe("createMeme", () => {
     ).rejects.toThrow();
 
     expect(await allMemes(t)).toHaveLength(0);
+  });
+
+  test("failed attempts do not consume the upload rate limit (#69, #79)", async () => {
+    const { t, asUser } = await setup();
+
+    // `uploadMeme` is a 10/hour token bucket. `createMeme` is an *action*, and
+    // its non-consuming `check` peek runs before the R2 metadata read — so an
+    // unsynced-object rejection here must never touch the bucket. Trip it more
+    // than the bucket's capacity to prove that: if any of these were secretly
+    // consuming a token, the bucket would already be exhausted and the final,
+    // valid create below would be rejected instead of succeeding.
+    for (let i = 0; i < 15; i++) {
+      await expect(
+        asUser.action(api.memes.createMeme, {
+          key: `memes/ghost-${i}.png`,
+          tags: [],
+        }),
+      ).rejects.toThrow();
+    }
+    expect(await allMemes(t)).toHaveLength(0);
+
+    // The token is only ever consumed atomically with a successful insert
+    // (inside `insertProcessingMeme`), so a valid upload right after those 15
+    // failures must still go through.
+    await seedObject(t, "memes/real.png", "image/png", MB);
+    const memeId = await asUser.action(api.memes.createMeme, {
+      key: "memes/real.png",
+      tags: [],
+    });
+
+    expect(await getMeme(t, memeId)).not.toBeNull();
   });
 
   test("rejects an unauthenticated caller, leaving no meme", async () => {

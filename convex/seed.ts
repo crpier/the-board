@@ -21,11 +21,14 @@ import { SEED_MEMES } from "./seedAssets";
  * seeded feed renders and behaves like one built through the UI and exercises the
  * view-model resolver and voting end to end.
  *
- * Two deliberate shortcuts vs. the UI path: it skips `createMeme`'s
+ * Three deliberate shortcuts vs. the UI path: it skips `createMeme`'s
  * server-authoritative re-validation (size/content-type) and tag canonicalization
  * — the bundled samples are valid and `SEED_MEMES` tags are already canonical —
- * and it seeds votes through a dedicated internal mutation rather than `castVote`
- * (which needs an authenticated caller). Both keep the seed self-contained.
+ * it passes `skipRateLimit: true` to `insertProcessingMeme` since a seed batch
+ * routinely exceeds the 10/hour `uploadMeme` budget and isn't a real user
+ * action (#69), and it seeds votes through a dedicated internal mutation
+ * rather than `castVote` (which needs an authenticated caller). All three keep
+ * the seed self-contained.
  *
  * It is **not** idempotent: each run appends a fresh batch. After a wipe that is
  * exactly what you want; to re-seed cleanly, wipe first. It is gated to internal
@@ -83,6 +86,9 @@ export const seed = internalAction({
           title: spec.title,
           tags: spec.tags,
           visibility: spec.visibility,
+          // The seed batch routinely exceeds the 10/hour `uploadMeme` budget
+          // and isn't a real user action, so it must not be throttled (#69).
+          skipRateLimit: true,
         },
       );
       if (spec.votes !== undefined) {

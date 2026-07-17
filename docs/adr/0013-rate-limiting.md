@@ -25,12 +25,22 @@ Two questions needed answering:
 ## Decision
 
 **Use `@convex-dev/rate-limiter`, Convex's own component, rather than
-hand-rolled counters.** It is transactional (a rate-limit consumption rolls
-back with the rest of the mutation), does not require a document per user
-per limit growing unbounded, and ships a typed rejection path. Registered in
-`convex/convex.config.ts` alongside the existing `r2` component; configured
-once in `convex/rateLimiter.ts` as a single `RateLimiter` instance shared by
-every mutation that needs it.
+hand-rolled counters.** It is transactional _within a mutation_ — a
+`rateLimiter.limit` consumption rolls back together with the rest of that
+mutation's writes if the mutation later throws — does not require a document
+per user per limit growing unbounded, and ships a typed rejection path.
+Registered in `convex/convex.config.ts` alongside the existing `r2` component;
+configured once in `convex/rateLimiter.ts` as a single `RateLimiter` instance
+shared by every mutation that needs it.
+
+That rollback guarantee is scoped to a single mutation's transaction — it
+does **not** extend across a `ctx.runMutation` call made from an _action_.
+Each such nested call is its own committed transaction; if the action goes on
+to throw afterward, that nested mutation's writes (including a rate-limiter
+consumption) stay committed. `createMeme` is an action (see below), so its
+`uploadMeme` limit has to be consumed inside the mutation that actually
+persists the meme (`insertProcessingMeme`), not in the action itself — see
+"The limit check" below for how this plays out.
 
 **Every limit is a per-user "token bucket," keyed by `Id<"users">`, not
 global or per-IP.** Token bucket (vs. "fixed window") lets a real user burst
@@ -51,22 +61,35 @@ Chosen limits (see `convex/rateLimiter.ts` for the authoritative config):
 naturally self-limiting (a user only has so many memes to delete), and
 moderation is an admin-trust action, out of this issue's scope.
 
-**Rejection is `rateLimiter.limit(ctx, name, { key, throws: true })`,
-which throws a `ConvexError` carrying `{ kind: "RateLimited", name,
-retryAfter }`** — the component's own typed shape, detected client-side with
-its exported `isRateLimitError` guard rather than a hand-rolled
-`{code, retryAfter}` payload wrapping it a second time. `src/lib/errors.ts`
-centralizes turning that into a friendly string ("Slow down — try again in
-Xs"), reused by the upload form, the meme edit form, and the vote control —
-the same inline-`error`-signal pattern every other mutation failure in this
-app already uses (no toast system exists or was introduced).
+**Rejection is `{ throws: true }` on either `rateLimiter.limit` (the
+consuming call, used by `castVote`, `updateMeme`, and `insertProcessingMeme`)
+or `rateLimiter.check` (the non-consuming peek, used only by `createMeme`'s
+early rejection), both of which throw the same `ConvexError` carrying
+`{ kind: "RateLimited", name, retryAfter }`** — the component's own typed
+shape, detected client-side with its exported `isRateLimitError` guard rather
+than a hand-rolled `{code, retryAfter}` payload wrapping it a second time.
+`src/lib/errors.ts` centralizes turning that into a friendly string ("Slow
+down — try again in Xs"), reused by the upload form, the meme edit form, and
+the vote control — the same inline-`error`-signal pattern every other
+mutation failure in this app already uses (no toast system exists or was
+introduced).
 
-The limit check runs **before** the work it guards: in `createMeme`, before
-the R2 metadata read; in `updateMeme`, right after `requireOwnedMeme`
-confirms ownership (using the already-resolved `meme.authorId` as the key,
-avoiding a redundant null check); in `castVote`, right after the
-authentication check, before the meme lookup. A rejected call therefore
-never pays for work past the auth/ownership gate.
+The limit check runs **before** the work it guards, but `createMeme` splits
+that check into two steps because it is an action, not a mutation (see
+Consequences): a cheap, non-consuming `rateLimiter.check(..., { throws: true
+})` **peek** runs first, before the R2 metadata read, so an already-exhausted
+caller is rejected without spending that work — but it doesn't touch the
+bucket. The token that actually counts is consumed by
+`rateLimiter.limit(..., { throws: true })` inside `insertProcessingMeme`, the
+internal mutation that inserts the `memes` row, so consumption is atomic with
+a successful insert: a caller who trips a later, R2-derived validation error
+(e.g. an unsynced object) never reaches that mutation and is never charged a
+token for the failed attempt. `updateMeme` and `castVote` don't need this
+split — both are plain mutations, so a single `rateLimiter.limit(...,
+{ throws: true })` call partway through (right after `requireOwnedMeme`
+confirms ownership in `updateMeme`; right after the authentication check,
+before the meme lookup, in `castVote`) rolls back correctly if anything later
+in that same mutation throws.
 
 ## Consequences
 
@@ -96,3 +119,9 @@ never pays for work past the auth/ownership gate.
   a detected rate limit; every other vote failure stays silent, matching the
   prior behavior, since votes fail for reasons (deleted/hidden meme) that
   aren't actionable for the user clicking a stale card.
+- `insertProcessingMeme` (internal, called by both `createMeme` and the dev
+  `seed.ts` script) takes an internal-only `skipRateLimit` flag. `seed.ts`
+  passes it because a seed run routinely inserts far more than the 10/hour
+  `uploadMeme` budget in one shot and isn't a real user action; `createMeme`
+  never passes it, so every upload that actually reaches the client goes
+  through the rate limit.
