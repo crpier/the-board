@@ -130,6 +130,17 @@ describe("GET /meme/:id (og unfurl shell)", () => {
     expect(html).toContain('property="og:title" content="The Board"');
   });
 
+  test("malformed percent-encoding in the id unfurls with the generic fallback, not a crash", async () => {
+    const t = convexTest(schema, modules);
+
+    const res = await t.fetch(`/meme/%`);
+    const html = await res.text();
+
+    expect(res.status).toBe(200);
+    expect(html).toContain('property="og:title" content="The Board"');
+    expect(html).not.toContain("Secret Sauce");
+  });
+
   test("video memes unfurl with title/description but no og:image", async () => {
     const t = convexTest(schema, modules);
     const { memeId } = await seedMeme(t, {

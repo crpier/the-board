@@ -113,7 +113,15 @@ http.route({
   method: "GET",
   handler: httpAction(async (ctx, request) => {
     const url = new URL(request.url);
-    const id = decodeURIComponent(url.pathname.slice("/meme/".length));
+    // Malformed percent-encoding (e.g. a bare `%`) makes `decodeURIComponent`
+    // throw. Treat that the same as any other unrecognized id rather than
+    // letting the error escape the http action.
+    let id: string;
+    try {
+      id = decodeURIComponent(url.pathname.slice("/meme/".length));
+    } catch {
+      id = "";
+    }
     const appUrl = id
       ? `${appOrigin()}/meme/${encodeURIComponent(id)}`
       : `${appOrigin()}/`;
