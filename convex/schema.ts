@@ -46,6 +46,16 @@ export default defineSchema({
     mediaKey: v.string(),
     mediaType: mediaTypeValidator,
     tags: v.array(v.string()),
+    // When a `deleted` meme was tombstoned (ADR 0009). Undefined for every
+    // non-deleted meme. Paired with `reclaimJobId` to gate the undo window: set
+    // together by `deleteMeme`, cleared together by `restoreMeme`.
+    deletedAt: v.optional(v.number()),
+    // Id of the scheduled `reclaimDeletedMeme` job that will delete the R2
+    // object once the undo window elapses. Its presence *is* the undo window:
+    // `restoreMeme` requires it (and cancels it), and the reclaim job clears it
+    // before touching R2 so a restored meme can never be reclaimed out from
+    // under the owner. Undefined once reclaimed (or for a never-deleted meme).
+    reclaimJobId: v.optional(v.id("_scheduled_functions")),
     // Authoritative author reference. Display name is resolved live from the
     // user row (`displayName ?? name`) at read time, never denormalized onto
     // the meme.

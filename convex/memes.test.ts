@@ -1129,17 +1129,22 @@ describe("deleteMeme", () => {
     });
   }
 
-  test("owner delete tombstones the meme, reclaims the object, keeps votes", async () => {
+  test("owner delete tombstones the meme, schedules a reclaim, keeps votes and the object", async () => {
     const { t, userId, memeId, key, asOwner } = await setup();
     // A vote that must survive the delete (tombstone leaves rows in place).
     await t.run(async (ctx) => {
       await ctx.db.insert("votes", { userId, memeId, value: "up" });
     });
 
-    await asOwner.action(api.memes.deleteMeme, { memeId });
+    await asOwner.mutation(api.memes.deleteMeme, { memeId });
 
-    expect((await getMeme(t, memeId))?.status).toBe("deleted");
-    expect(await objectExists(t, key)).toBe(false);
+    const meme = await getMeme(t, memeId);
+    expect(meme?.status).toBe("deleted");
+    expect(meme?.deletedAt).toBeTypeOf("number");
+    // The reclaim job is scheduled, not run inline — deleteMeme is a plain
+    // mutation now, so the object is untouched until the window elapses.
+    expect(meme?.reclaimJobId).toBeDefined();
+    expect(await objectExists(t, key)).toBe(true);
     const votes = await t.run(async (ctx) =>
       ctx.db
         .query("votes")
@@ -1157,7 +1162,7 @@ describe("deleteMeme", () => {
     const asIntruder = t.withIdentity({ subject: `${intruderId}|session` });
 
     await expect(
-      asIntruder.action(api.memes.deleteMeme, { memeId }),
+      asIntruder.mutation(api.memes.deleteMeme, { memeId }),
     ).rejects.toThrow();
 
     expect((await getMeme(t, memeId))?.status).toBe("ready");
@@ -1167,9 +1172,165 @@ describe("deleteMeme", () => {
   test("rejects an unauthenticated caller, leaving the meme and object intact", async () => {
     const { t, memeId, key } = await setup();
 
-    await expect(t.action(api.memes.deleteMeme, { memeId })).rejects.toThrow();
+    await expect(
+      t.mutation(api.memes.deleteMeme, { memeId }),
+    ).rejects.toThrow();
 
     expect((await getMeme(t, memeId))?.status).toBe("ready");
     expect(await objectExists(t, key)).toBe(true);
+  });
+});
+
+describe("restoreMeme and the reclaim window", () => {
+  /**
+   * Same setup as `deleteMeme`, plus a helper to run the reclaim job directly.
+   * `deleteMeme` schedules `reclaimDeletedMeme` a full `DELETE_UNDO_WINDOW_MS`
+   * (24h) out via a real `setTimeout` under convex-test, so nothing short of
+   * fake-timer surgery makes it fire on its own in a test process. Invoking the
+   * internal action directly is the documented way to simulate "the window
+   * elapsed" without waiting 24 real hours.
+   */
+  async function setup(key = "memes/del.png") {
+    const t = convexTest(schema, modules);
+    r2Test.register(t);
+    actionRetrier.register(t, "r2/actionRetrier");
+
+    const { userId, memeId } = await seedMeme(t, { mediaKey: key });
+    await t.run(async (ctx) => {
+      await ctx.runMutation(components.r2.lib.upsertMetadata, {
+        key,
+        bucket: "test-bucket",
+        contentType: "image/png",
+        size: MB,
+        lastModified: new Date().toISOString(),
+        link: `https://dash.example/objects/${key}/details`,
+      });
+    });
+
+    const asOwner = t.withIdentity({ subject: `${userId}|session` });
+    await asOwner.mutation(api.memes.deleteMeme, { memeId });
+
+    return { t, userId, memeId, key, asOwner };
+  }
+
+  function getMeme(t: ReturnType<typeof convexTest>, memeId: Id<"memes">) {
+    return t.run(async (ctx) => ctx.db.get(memeId));
+  }
+
+  function objectExists(t: ReturnType<typeof convexTest>, key: string) {
+    return t.run(async (ctx) => {
+      const metadata = await ctx.runQuery(components.r2.lib.getMetadata, {
+        key,
+        bucket: "test-bucket",
+        endpoint: process.env.R2_ENDPOINT!,
+        accessKeyId: process.env.R2_ACCESS_KEY_ID!,
+        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
+      });
+      return metadata !== null;
+    });
+  }
+
+  function runReclaim(t: ReturnType<typeof convexTest>, memeId: Id<"memes">) {
+    return t.action(internal.memes.reclaimDeletedMeme, { memeId });
+  }
+
+  test("restoring within the window flips the meme back to ready and leaves the object alone", async () => {
+    const { t, memeId, key, asOwner } = await setup();
+
+    await asOwner.mutation(api.memes.restoreMeme, { memeId });
+
+    const meme = await getMeme(t, memeId);
+    expect(meme?.status).toBe("ready");
+    expect(meme?.deletedAt).toBeUndefined();
+    expect(meme?.reclaimJobId).toBeUndefined();
+    expect(await objectExists(t, key)).toBe(true);
+  });
+
+  test("restoring cancels the reclaim job, so a late-firing job is a no-op", async () => {
+    const { t, memeId, key, asOwner } = await setup();
+
+    await asOwner.mutation(api.memes.restoreMeme, { memeId });
+    // Simulate the original job still firing (e.g. a race with the cancel);
+    // `finalizeReclaim`'s guard must no-op rather than reclaim a live meme.
+    await runReclaim(t, memeId);
+
+    const meme = await getMeme(t, memeId);
+    expect(meme?.status).toBe("ready");
+    expect(await objectExists(t, key)).toBe(true);
+  });
+
+  test("once the window elapses, the object is reclaimed and restore is no longer possible", async () => {
+    const { t, memeId, key, asOwner } = await setup();
+
+    await runReclaim(t, memeId);
+
+    expect(await objectExists(t, key)).toBe(false);
+    const meme = await getMeme(t, memeId);
+    expect(meme?.status).toBe("deleted");
+    expect(meme?.reclaimJobId).toBeUndefined();
+
+    await expect(
+      asOwner.mutation(api.memes.restoreMeme, { memeId }),
+    ).rejects.toThrow("This meme can no longer be restored.");
+  });
+
+  test("a re-run of the reclaim job after it already ran is a no-op, not a double-delete error", async () => {
+    const { t, memeId, key } = await setup();
+
+    await runReclaim(t, memeId);
+    expect(await objectExists(t, key)).toBe(false);
+
+    // Should resolve cleanly, not throw trying to delete an already-gone object.
+    await expect(runReclaim(t, memeId)).resolves.toBeNull();
+  });
+
+  test("rejects restoring a meme that was never deleted", async () => {
+    const t = convexTest(schema, modules);
+    const { userId, memeId } = await seedMeme(t);
+    const asOwner = t.withIdentity({ subject: `${userId}|session` });
+
+    await expect(
+      asOwner.mutation(api.memes.restoreMeme, { memeId }),
+    ).rejects.toThrow("This meme can no longer be restored.");
+  });
+
+  test("rejects a non-owner restoring a deleted meme, leaving it deleted", async () => {
+    const { t, memeId } = await setup();
+    const intruderId = await t.run(async (ctx) =>
+      ctx.db.insert("users", { name: "Intruder" }),
+    );
+    const asIntruder = t.withIdentity({ subject: `${intruderId}|session` });
+
+    await expect(
+      asIntruder.mutation(api.memes.restoreMeme, { memeId }),
+    ).rejects.toThrow();
+
+    expect((await getMeme(t, memeId))?.status).toBe("deleted");
+  });
+
+  test("rejects an unauthenticated restore attempt", async () => {
+    const { t, memeId } = await setup();
+
+    await expect(
+      t.mutation(api.memes.restoreMeme, { memeId }),
+    ).rejects.toThrow();
+
+    expect((await getMeme(t, memeId))?.status).toBe("deleted");
+  });
+
+  test("restored memes are visible in the public feed again", async () => {
+    const { t, memeId, asOwner } = await setup();
+
+    expect(
+      (await t.query(api.memes.listPublicMemes, firstPage)).page,
+    ).toHaveLength(0);
+
+    await asOwner.mutation(api.memes.restoreMeme, { memeId });
+
+    expect(
+      (await t.query(api.memes.listPublicMemes, firstPage)).page.map(
+        (m) => m._id,
+      ),
+    ).toContain(memeId);
   });
 });
