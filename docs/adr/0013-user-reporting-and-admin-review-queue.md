@@ -28,8 +28,12 @@ non-goal — both are updated in this slice.
 optional free-text details. One _open_ report per reporter per meme — a
 duplicate attempt while the first is still open is rejected, enforced via the
 `by_meme_and_reporter_and_status` index rather than a filter scan. A report
-doesn't require the meme to still be visible to the reporter (they may have
-seen it before an admin hid it), only that it isn't tombstoned.
+requires the meme to be public and ready — the same visibility guard
+`castVote` uses — rather than merely un-tombstoned: a missing id, a private
+meme, and a meme an admin already hid all throw the identical opaque
+not-found error, so a guessed/stale id can't be used to probe a meme's
+existence or visibility. One consequence: a meme an admin has already hidden
+can no longer be reported, which is fine since it's already hidden.
 
 **The admin queue**: `/admin` lists open reports, oldest first
 (`reports.listOpenReports`, backed by a `by_status` index), each resolved to

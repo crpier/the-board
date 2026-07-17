@@ -183,7 +183,60 @@ describe("createReport", () => {
 
     await expect(
       asReporter.mutation(api.reports.createReport, { memeId, reason: "spam" }),
-    ).rejects.toThrow();
+    ).rejects.toThrow("Meme not found.");
+  });
+
+  // These three cases must be indistinguishable to the caller — a guessed or
+  // stale meme id must not let a signed-in user learn whether the meme
+  // exists, is private, or was hidden by an admin (opaque-not-found
+  // convention, mirrors `castVote`'s guard).
+  test("reporting a private meme throws the same opaque error as a missing meme", async () => {
+    const { memeId, asReporter } = await setup({ visibility: "private" });
+
+    await expect(
+      asReporter.mutation(api.reports.createReport, { memeId, reason: "spam" }),
+    ).rejects.toThrow("Meme not found.");
+  });
+
+  test("reporting an admin-hidden meme is rejected with the opaque not-found error", async () => {
+    const { t, memeId, asReporter, asAdmin } = await setup();
+    await asAdmin.mutation(api.reports.resolveReport, {
+      reportId: await asReporter.mutation(api.reports.createReport, {
+        memeId,
+        reason: "spam",
+      }),
+      resolution: "hide",
+    });
+
+    const meme = await readMeme(t, memeId);
+    expect(meme.visibility).toBe("private");
+
+    const otherReporterId = await t.run(async (ctx) =>
+      ctx.db.insert("users", { name: "Other reporter" }),
+    );
+    const asOtherReporter = t.withIdentity({
+      subject: `${otherReporterId}|session`,
+    });
+
+    await expect(
+      asOtherReporter.mutation(api.reports.createReport, {
+        memeId,
+        reason: "spam",
+      }),
+    ).rejects.toThrow("Meme not found.");
+  });
+
+  test("reporting a public+ready meme succeeds", async () => {
+    const { t, memeId, asReporter } = await setup();
+
+    await asReporter.mutation(api.reports.createReport, {
+      memeId,
+      reason: "spam",
+    });
+
+    expect(
+      await t.run(async (ctx) => ctx.db.query("reports").collect()),
+    ).toHaveLength(1);
   });
 });
 

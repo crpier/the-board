@@ -75,6 +75,10 @@ The product should let guests browse public content immediately, let authenticat
 - Reporting requires authentication. A signed-in user can report a meme with a
   reason (spam, harassment, hate speech, illegal content, or other) and
   optional details.
+- A meme can only be reported while it is public and ready, the same
+  visibility guard as voting; a missing id, a private meme, and a meme an
+  admin already hid all resolve to the same not-found error, never revealing
+  whether the meme exists.
 - A user can hold at most one open report per meme; a second report while the
   first is still open is rejected. They may report again once that report is
   resolved or dismissed.

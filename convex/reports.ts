@@ -135,10 +135,13 @@ export const myReportStatus = query({
  * index (no filter scan, per Convex guidelines) so the check is a single
  * indexed lookup.
  *
- * Reporting doesn't require the meme to still be visible to the reporter (a
- * meme an admin already hid can still be reported/re-reported by someone who
- * saw it before); it only requires the meme to still exist and not be
- * tombstoned, matching the opaque-not-found convention elsewhere.
+ * Reportable only if the meme is public + ready, mirroring `castVote`'s guard
+ * (and the opaque-not-found convention elsewhere): a missing id, a private
+ * meme, and a meme an admin already hid all throw the identical "Meme not
+ * found." error, so a guessed/stale id can't be used as an existence oracle.
+ * No owner exception — reporting your own private meme is pointless. One
+ * consequence: once an admin hides a meme it can no longer be reported, which
+ * is fine because it's already hidden.
  */
 export const createReport = mutation({
   args: {
@@ -154,7 +157,11 @@ export const createReport = mutation({
     }
 
     const meme = await ctx.db.get(args.memeId);
-    if (meme === null || meme.status === "deleted") {
+    if (
+      meme === null ||
+      meme.visibility !== "public" ||
+      meme.status !== "ready"
+    ) {
       throw new Error("Meme not found.");
     }
 
