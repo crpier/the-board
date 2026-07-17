@@ -65,6 +65,11 @@ The product should let guests browse public content immediately, let authenticat
 - Tags are a discovery tool: a meme's tags are searchable terms, and each tag on
   a card is clickable, running a search (`/search?q=<tag>`) for that tag in the
   feed, on the detail page, and within results alike.
+- The nav also has a "Random" action, open to everyone. Clicking it lands on a
+  random public, ready meme's detail page; repeated clicks vary; a private,
+  hidden, or not-yet-ready meme is never a possible result. If there are no
+  public memes yet, it shows a small inline message instead of navigating
+  (ADR 0014).
 
 ### Sharing
 
@@ -82,7 +87,7 @@ The product should let guests browse public content immediately, let authenticat
   client-side rendered (ADR 0002) and never server-renders `/meme/:id`, so
   unfurl bots (which fetch a URL but don't run JavaScript) need a
   server-rendered response elsewhere. That response is served by a Convex http
-  action (ADR 0013); opening the link redirects a human to the real app page
+  action (ADR 0015); opening the link redirects a human to the real app page
   immediately.
 
 ### Interaction
@@ -96,7 +101,12 @@ The product should let guests browse public content immediately, let authenticat
 
 - Authenticated users can upload memes.
 - Authenticated users can edit metadata for their own memes.
-- Authenticated users can delete their own memes.
+- Authenticated users can delete their own memes. Delete asks for confirmation
+  through an in-app modal, never a browser `confirm()`.
+- A deleted meme is immediately hidden everywhere (feed, profile, search,
+  detail) but stays restorable for a fixed undo window (currently 24 hours)
+  before its media is permanently reclaimed. The owner can undo a delete from
+  the confirmation toast shown right after deleting.
 - Users can edit their profile display name from the settings page; other
   profile fields (email, avatar) stay managed by the auth provider.
 
