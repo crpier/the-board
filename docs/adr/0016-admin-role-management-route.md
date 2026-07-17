@@ -1,4 +1,4 @@
-# ADR 0013 - Admin Role Management via a Dedicated `/admin/users` Route
+# ADR 0016 - Admin Role Management via a Dedicated `/admin/users` Route
 
 Date: 2026-07-17
 Status: accepted
