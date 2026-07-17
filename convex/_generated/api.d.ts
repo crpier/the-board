@@ -15,6 +15,7 @@ import type * as media from "../media.js";
 import type * as memes from "../memes.js";
 import type * as profile from "../profile.js";
 import type * as r2 from "../r2.js";
+import type * as rateLimiter from "../rateLimiter.js";
 import type * as reports from "../reports.js";
 import type * as seed from "../seed.js";
 import type * as seedAssets from "../seedAssets.js";
@@ -37,6 +38,7 @@ declare const fullApi: ApiFromModules<{
   memes: typeof memes;
   profile: typeof profile;
   r2: typeof r2;
+  rateLimiter: typeof rateLimiter;
   reports: typeof reports;
   seed: typeof seed;
   seedAssets: typeof seedAssets;
@@ -230,43 +232,13 @@ export declare const components: {
         },
         { ok: true; retryAfter?: number } | { ok: false; retryAfter: number }
       >;
-      rateLimit: FunctionReference<
+      clearAll: FunctionReference<
         "mutation",
         "internal",
-        {
-          config:
-            | {
-                capacity?: number;
-                kind: "token bucket";
-                maxReserved?: number;
-                period: number;
-                rate: number;
-                shards?: number;
-                start?: null;
-              }
-            | {
-                capacity?: number;
-                kind: "fixed window";
-                maxReserved?: number;
-                period: number;
-                rate: number;
-                shards?: number;
-                start?: number;
-              };
-          count?: number;
-          key?: string;
-          name: string;
-          reserve?: boolean;
-          throws?: boolean;
-        },
-        { ok: true; retryAfter?: number } | { ok: false; retryAfter: number }
-      >;
-      resetRateLimit: FunctionReference<
-        "mutation",
-        "internal",
-        { key?: string; name: string },
+        { before?: number },
         null
       >;
+      getServerTime: FunctionReference<"mutation", "internal", {}, number>;
       getValue: FunctionReference<
         "query",
         "internal",
@@ -319,13 +291,43 @@ export declare const components: {
           value: number;
         }
       >;
-      clearAll: FunctionReference<
+      rateLimit: FunctionReference<
         "mutation",
         "internal",
-        { before?: number },
+        {
+          config:
+            | {
+                capacity?: number;
+                kind: "token bucket";
+                maxReserved?: number;
+                period: number;
+                rate: number;
+                shards?: number;
+                start?: null;
+              }
+            | {
+                capacity?: number;
+                kind: "fixed window";
+                maxReserved?: number;
+                period: number;
+                rate: number;
+                shards?: number;
+                start?: number;
+              };
+          count?: number;
+          key?: string;
+          name: string;
+          reserve?: boolean;
+          throws?: boolean;
+        },
+        { ok: true; retryAfter?: number } | { ok: false; retryAfter: number }
+      >;
+      resetRateLimit: FunctionReference<
+        "mutation",
+        "internal",
+        { key?: string; name: string },
         null
       >;
-      getServerTime: FunctionReference<"mutation", "internal", {}, number>;
     };
     time: {
       getServerTime: FunctionReference<"mutation", "internal", {}, number>;
