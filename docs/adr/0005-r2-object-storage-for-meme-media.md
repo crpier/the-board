@@ -49,17 +49,41 @@ SolidJS client env (`src/env.ts`), because these are server secrets:
 | `R2_PUBLIC_URL`        | Cloudflare custom domain base for public CDN serving |
 
 The first four are consumed by the component itself; `R2_PUBLIC_URL` is ours.
-Set them with `npx convex env set <NAME> <value>`.
+Set them with `pnpm exec convex env set <NAME> <value>`.
 
 ### Server helpers
 
 `convex/r2.ts` exposes:
 
 - `generateUploadUrl` — presigned PUT URL for direct browser → R2 upload.
-- `syncMetadata` — HEAD the object and persist content-type + size in Convex.
+- `syncUploadedMetadata` — action used by the upload UI to HEAD the object and
+  synchronously persist content-type + size in Convex before publish.
+- `syncMetadata` — the component-generated async scheduler, kept exported for
+  low-level/manual use but not used by the publish form because it can race the
+  immediate `createMeme` call.
 - `getMetadata` — read that content-type + size back.
 - `deleteObject` — remove an object and its metadata.
 - `getMediaUrl` / `resolveUrl(key)` — map an object key to its public CDN URL.
+
+### Browser upload CORS
+
+Because the browser PUTs directly to R2, the bucket must allow the web app's
+origin. Local development uses the Vinxi/SolidStart origin (normally
+`http://localhost:3000`; include any alternate port you run), not the Convex URL.
+A minimal dev CORS policy is:
+
+```json
+[
+  {
+    "AllowedOrigins": ["http://localhost:3000"],
+    "AllowedMethods": ["GET", "PUT"],
+    "AllowedHeaders": ["Content-Type"]
+  }
+]
+```
+
+If this is missing, the browser reports the PUT as a network failure before the
+backend can see the upload.
 
 `generateUploadUrl` and `deleteObject` are auth-gated via the component's
 `checkUpload` / `checkDelete` callbacks (`getAuthUserId`), matching the

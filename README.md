@@ -50,4 +50,8 @@ It is intentionally lightweight, so the focus stays on clean vertical slices, wo
 
 ## Development notes
 
+- Use `pnpm exec convex dev` and `pnpm dev` for local development.
+- Local uploads require the R2 bucket CORS policy to allow the app origin
+  (normally `http://localhost:3000`), `PUT`, and the `Content-Type` header; see
+  `docs/adr/0005-r2-object-storage-for-meme-media.md`.
 - This project was created with the [Solid CLI](https://github.com/solidjs-community/solid-cli).

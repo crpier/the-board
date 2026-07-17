@@ -61,4 +61,12 @@ describe("upload auth gate", () => {
       /Not authenticated/,
     );
   });
+
+  test("rejects an unauthenticated syncUploadedMetadata call", async () => {
+    const t = convexTest(schema, modules);
+    // Auth runs before the action tries to HEAD the real bucket.
+    await expect(
+      t.action(api.r2.syncUploadedMetadata, { key: "memes/cat.jpg" }),
+    ).rejects.toThrow(/Not authenticated/);
+  });
 });
