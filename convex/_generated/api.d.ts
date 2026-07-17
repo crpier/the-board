@@ -15,6 +15,7 @@ import type * as media from "../media.js";
 import type * as memes from "../memes.js";
 import type * as profile from "../profile.js";
 import type * as r2 from "../r2.js";
+import type * as reports from "../reports.js";
 import type * as seed from "../seed.js";
 import type * as seedAssets from "../seedAssets.js";
 import type * as users from "../users.js";
@@ -36,6 +37,7 @@ declare const fullApi: ApiFromModules<{
   memes: typeof memes;
   profile: typeof profile;
   r2: typeof r2;
+  reports: typeof reports;
   seed: typeof seed;
   seedAssets: typeof seedAssets;
   users: typeof users;

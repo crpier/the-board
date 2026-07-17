@@ -84,6 +84,17 @@ export default function Navbar() {
             >
               Upload
             </a>
+            {/* Admin-only entry point to the review queue (#67). Hidden for
+                everyone else — `/admin` itself re-checks admin status
+                server-side, so this is discoverability, not the gate. */}
+            <Show when={viewer.data()?.isAdmin}>
+              <A
+                href="/admin"
+                class="text-sm text-[#ffd43b] transition-colors hover:text-[#ffd43b]/80"
+              >
+                Reports
+              </A>
+            </Show>
             {/* Admin-only entry point to role management (#68). No shared
                 `/admin` landing page — this links straight to its
                 self-contained route. */}

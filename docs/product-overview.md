@@ -20,8 +20,7 @@ The product should let guests browse public content immediately, let authenticat
 
 - Guest: browses public memes and public meme detail pages.
 - User: browses, votes, uploads, and manages their own memes.
-- Admin: moderates content and reviews system findings mostly through the
-  normal UI, plus manages who else holds the admin role via `/admin/users`.
+- Admin: moderates content directly on flagged memes, reviews open reports and system findings in the `/admin` review queue, and manages who else holds the admin role via `/admin/users`.
 
 ## Core experience
 
@@ -97,6 +96,16 @@ The product should let guests browse public content immediately, let authenticat
 - Signed-out users see disabled voting controls.
 - Each user can hold one active vote per meme: upvote, downvote, or no vote.
 - Feed and detail surfaces show aggregate upvote and downvote counts.
+- Reporting requires authentication. A signed-in user can report a meme with a
+  reason (spam, harassment, hate speech, illegal content, or other) and
+  optional details.
+- A meme can only be reported while it is public and ready, the same
+  visibility guard as voting; a missing id, a private meme, and a meme an
+  admin already hid all resolve to the same not-found error, never revealing
+  whether the meme exists.
+- A user can hold at most one open report per meme; a second report while the
+  first is still open is rejected. They may report again once that report is
+  resolved or dismissed.
 
 ### Ownership
 
@@ -125,6 +134,17 @@ The product should let guests browse public content immediately, let authenticat
   whether the meme exists. Admins get no special detail access here.
 - Admin moderation stays simple at the product surface: admins change a meme's visibility.
 - AI moderation may run after publish and hide content until an admin restores it.
+- Admins have two moderation entry points: the inline visibility toggle on a
+  meme they're already looking at (`MemeCard`, ADR 0012), and the `/admin`
+  review queue (ADR 0018) for reports and future findings that aren't tied to
+  an admin's current scroll position.
+- The `/admin` review queue lists open reports, oldest first, each resolved
+  to the reporter's name and the reported meme's preview. An admin resolves a
+  report by hiding the meme (the same visibility change as the inline
+  toggle) or dismissing it with no meme change; resolving is final — there is
+  no reopen path.
+- `/admin` is admin-only; every other viewer (guest or signed-in non-admin)
+  gets the same not-found treatment as any other hidden route.
 
 ## House rules
 
@@ -133,10 +153,11 @@ The product should let guests browse public content immediately, let authenticat
 - Don't spam the feed with duplicate or repeated posts.
 - Admin visibility decisions are final within the product surface.
 - The `/about` page is the canonical place these rules are presented to users.
-- These rules are enforced today only through manual admin visibility
-  moderation; automated duplicate detection and AI moderation are planned
-  (see the Duplicate detection section and Open product questions) and are
-  not yet live, so `/about` must not describe them as active.
+- These rules are enforced today through manual admin visibility moderation,
+  either directly on a meme or by resolving a user report in the `/admin`
+  queue; automated duplicate detection and AI moderation are planned (see the
+  Duplicate detection section and Open product questions) and are not yet
+  live, so `/about` must not describe them as active.
 
 ## Duplicate detection
 
@@ -158,9 +179,12 @@ The product should let guests browse public content immediately, let authenticat
 ## Permissions
 
 - Guests can browse public, ready memes only.
-- Users can interact with their own content and participate through voting.
+- Users can interact with their own content and participate through voting
+  and reporting.
 - The first registered user becomes admin automatically.
-- Admins can moderate any meme through visibility changes and review system findings in the normal UI.
+- Admins can moderate any meme through visibility changes, either inline on
+  the meme or by resolving a report in the `/admin` queue, and review system
+  findings there too.
 - Admins can promote any user to admin, and demote an admin back to a regular
   user, from the user role management surface (`/admin/users`).
 - The last remaining admin can't be demoted — enforced server-side, not just
@@ -177,7 +201,7 @@ The product should let guests browse public content immediately, let authenticat
 - Hitting a limit does not lose the user's input: the form/action stays in
   place and shows a friendly "try again in Xs" message rather than a raw
   error.
-- Deleting and admin moderation are not rate-limited today.
+- Deleting, reporting, and admin moderation are not rate-limited today.
 
 ## Design principles
 
@@ -190,8 +214,9 @@ The product should let guests browse public content immediately, let authenticat
 
 - No `special` tier.
 - No unified admin dashboard as a primary product surface — admin
-  capabilities live in small, purpose-specific routes (e.g. `/admin/users`
-  for role management) rather than one general-purpose admin console.
+  capabilities live in small, purpose-specific routes: the `/admin` review
+  queue (reports today; see ADR 0018) and `/admin/users` for role management,
+  rather than one general-purpose admin console.
 - No comments, reposts, bookmarks, or social-graph features as core requirements.
 - No managed video streaming service as part of the core product.
 - No groups or community segmentation requirements.
@@ -211,3 +236,9 @@ The product should let guests browse public content immediately, let authenticat
   relevance mode over a meme's title + tags, with media type as a refinement and
   no recency/browse-only path. Tag browsing is therefore relevance-ordered, not
   chronological. Resolved in the Faceted Search epic (ADR 0010).
+- Whether moderation ever needs a dedicated console beyond the inline
+  visibility toggle: yes, once findings (user reports, and later duplicate
+  detection and AI moderation) aren't tied to an admin's current scroll
+  position, they need a queue. `/admin` is scoped to that review-queue job
+  only, not general admin tooling. Resolved in the Reporting + Admin Queue
+  slice (ADR 0018), reversing ADR 0012's original "no console" call.

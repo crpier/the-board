@@ -3,7 +3,12 @@ import { authTables } from "@convex-dev/auth/server";
 
 import { v } from "convex/values";
 
-import { mediaTypeValidator, visibilityValidator } from "./validators";
+import {
+  mediaTypeValidator,
+  reportReasonValidator,
+  reportStatusValidator,
+  visibilityValidator,
+} from "./validators";
 
 export default defineSchema({
   ...authTables,
@@ -104,4 +109,26 @@ export default defineSchema({
   })
     .index("by_user_and_meme", ["userId", "memeId"])
     .index("by_meme", ["memeId"]),
+  // User reports feeding the admin review queue (#67). No `createdAt` field —
+  // `_creationTime` already gives every doc an ordered timestamp, so a second
+  // one would just be a redundant copy (unlike `resolvedBy`, which records a
+  // fact `_creationTime` can't: *who* resolved it).
+  reports: defineTable({
+    reporterId: v.id("users"),
+    memeId: v.id("memes"),
+    reason: reportReasonValidator,
+    details: v.optional(v.string()),
+    status: reportStatusValidator,
+    // Set when an admin resolves or dismisses the report; absent while `open`.
+    resolvedBy: v.optional(v.id("users")),
+  })
+    // Backs the admin queue: open reports, oldest first.
+    .index("by_status", ["status"])
+    // Backs the duplicate-report guard in `createReport`: does this reporter
+    // already have an open report on this meme?
+    .index("by_meme_and_reporter_and_status", [
+      "memeId",
+      "reporterId",
+      "status",
+    ]),
 });
