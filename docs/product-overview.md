@@ -100,10 +100,13 @@ The product should let guests browse public content immediately, let authenticat
 
 - Users must only post content they have the right to share.
 - Illegal content, harassment, and hate speech are not allowed.
-- Duplicates are flagged for review, not auto-blocked; repeated or
-  bad-faith reposting can still get a meme hidden by an admin.
+- Don't spam the feed with duplicate or repeated posts.
 - Admin visibility decisions are final within the product surface.
 - The `/about` page is the canonical place these rules are presented to users.
+- These rules are enforced today only through manual admin visibility
+  moderation; automated duplicate detection and AI moderation are planned
+  (see the Duplicate detection section and Open product questions) and are
+  not yet live, so `/about` must not describe them as active.
 
 ## Duplicate detection
 
