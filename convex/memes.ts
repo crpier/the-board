@@ -199,6 +199,59 @@ export const getMeme = query({
 });
 
 /**
+ * Random-discovery backing the nav "Random" action (#66, ADR 0014). Returns a
+ * random public, ready meme's id, or `null` if there are none.
+ *
+ * Strategy — random-key index seek, not a table scan: `seed` is a `[0, 1)`
+ * float the **client** generates fresh per click with `Math.random()`. This
+ * query is otherwise pure — a query re-run with the same `seed` against
+ * unchanged data returns the same meme, satisfying Convex's determinism
+ * expectation for queries, while the client supplying a new `seed` each click
+ * is what makes repeated clicks land on different memes.
+ *
+ * The lookup is a single indexed `.first()` (`by_visibility_and_status_and_randomKey`):
+ * seek the first public+ready meme whose stored `randomKey >= seed`. If none
+ * exists (seed landed past the highest key), wrap around to the first
+ * public+ready meme in key order. This is O(log n) via the index, not O(n) —
+ * cost doesn't grow with table size.
+ *
+ * Rows written before `randomKey` shipped are still `undefined` until
+ * `backfillRandomKey` runs; Convex sorts a missing field first, so those rows
+ * are only reachable through the wraparound branch until backfilled — a
+ * temporary skew, not a broken/missing meme.
+ */
+export const getRandomMeme = query({
+  args: { seed: v.number() },
+  returns: v.union(v.id("memes"), v.null()),
+  handler: async (ctx, args) => {
+    const seeked = await ctx.db
+      .query("memes")
+      .withIndex("by_visibility_and_status_and_randomKey", (q) =>
+        q
+          .eq("visibility", "public")
+          .eq("status", "ready")
+          .gte("randomKey", args.seed),
+      )
+      .order("asc")
+      .first();
+    if (seeked !== null) {
+      return seeked._id;
+    }
+
+    // No key at or past the seed: wrap around to the smallest key in the
+    // public+ready partition. `null` here means the partition is empty.
+    const wrapped = await ctx.db
+      .query("memes")
+      .withIndex("by_visibility_and_status_and_randomKey", (q) =>
+        q.eq("visibility", "public").eq("status", "ready"),
+      )
+      .order("asc")
+      .first();
+    return wrapped?._id ?? null;
+  },
+});
+
+/**
  * Reactive full-text search backing `/search` (epic #49, ADR 0010). Returns the
  * same paginated envelope and `FeedMeme` view-model as `listPublicMemes`, so
  * result cards get live votes, the owner flag, and owner controls for free.
@@ -448,6 +501,9 @@ export const insertProcessingMeme = internalMutation({
       title: args.title,
       // `args.tags` are already canonicalized by the caller (`createMeme`/seed).
       searchText: buildSearchText(args.title, args.tags),
+      // Assigned once, never rewritten (ADR 0014) — the random-key index seek
+      // behind `getRandomMeme` depends on this being a stable, uniform tag.
+      randomKey: Math.random(),
       visibility: args.visibility,
       status: "processing",
       mediaKey: args.mediaKey,
@@ -740,6 +796,49 @@ export const backfillSearchText = internalMutation({
         await ctx.db.patch(meme._id, {
           searchText: buildSearchText(meme.title, meme.tags),
         });
+        patched++;
+      }
+    }
+
+    return {
+      isDone: result.isDone,
+      continueCursor: result.continueCursor,
+      scanned: result.page.length,
+      patched,
+    };
+  },
+});
+
+/**
+ * One-time, idempotent backfill for `randomKey` (#66, ADR 0014). Memes written
+ * before the field shipped have no `randomKey` and are only reachable through
+ * `getRandomMeme`'s wraparound branch until this runs; this assigns each such
+ * row a fresh `Math.random()` value so the back catalog is uniformly seekable.
+ *
+ * Bounded by pagination, same shape and same manual, post-deploy invocation as
+ * `backfillSearchText`:
+ *
+ *     pnpm convex run memes:backfillRandomKey '{"paginationOpts":{"numItems":100,"cursor":null}}'
+ *
+ * Idempotent: only rows still missing `randomKey` are patched, so a re-run
+ * (or a race with normal writes, which always set `randomKey` on insert) skips
+ * already-populated rows. `patched` reports how many rows this page touched.
+ */
+export const backfillRandomKey = internalMutation({
+  args: { paginationOpts: paginationOptsValidator },
+  returns: v.object({
+    isDone: v.boolean(),
+    continueCursor: v.string(),
+    scanned: v.number(),
+    patched: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const result = await ctx.db.query("memes").paginate(args.paginationOpts);
+
+    let patched = 0;
+    for (const meme of result.page) {
+      if (meme.randomKey === undefined) {
+        await ctx.db.patch(meme._id, { randomKey: Math.random() });
         patched++;
       }
     }

@@ -604,6 +604,115 @@ describe("backfillSearchText", () => {
   });
 });
 
+describe("getRandomMeme", () => {
+  test("seeks the first public+ready meme at or past the seed's randomKey", async () => {
+    const t = convexTest(schema, modules);
+    const { memeId: low } = await seedMeme(t, { randomKey: 0.1 });
+    const { memeId: mid } = await seedMeme(t, { randomKey: 0.5 });
+    const { memeId: high } = await seedMeme(t, { randomKey: 0.9 });
+
+    expect(await t.query(api.memes.getRandomMeme, { seed: 0.4 })).toBe(mid);
+    expect(await t.query(api.memes.getRandomMeme, { seed: 0.5 })).toBe(mid);
+    expect(await t.query(api.memes.getRandomMeme, { seed: 0.51 })).toBe(high);
+    expect(await t.query(api.memes.getRandomMeme, { seed: 0 })).toBe(low);
+  });
+
+  test("wraps around to the smallest randomKey when the seed is past the highest key", async () => {
+    const t = convexTest(schema, modules);
+    const { memeId: low } = await seedMeme(t, { randomKey: 0.1 });
+    await seedMeme(t, { randomKey: 0.5 });
+
+    expect(await t.query(api.memes.getRandomMeme, { seed: 0.99 })).toBe(low);
+  });
+
+  test("never returns a private, non-ready, or deleted meme", async () => {
+    const t = convexTest(schema, modules);
+    await seedMeme(t, {
+      randomKey: 0.2,
+      visibility: "private",
+    });
+    await seedMeme(t, {
+      randomKey: 0.3,
+      status: "processing",
+    });
+    await seedMeme(t, {
+      randomKey: 0.4,
+      status: "deleted",
+    });
+    const { memeId: onlyVisible } = await seedMeme(t, { randomKey: 0.6 });
+
+    // Every seed, including ones that land closer to the hidden rows' keys,
+    // must resolve to the one public+ready meme.
+    for (const seed of [0, 0.15, 0.25, 0.35, 0.45, 0.6, 0.99]) {
+      expect(await t.query(api.memes.getRandomMeme, { seed })).toBe(
+        onlyVisible,
+      );
+    }
+  });
+
+  test("returns null when there are no public, ready memes", async () => {
+    const t = convexTest(schema, modules);
+    await seedMeme(t, { visibility: "private", randomKey: 0.5 });
+
+    expect(await t.query(api.memes.getRandomMeme, { seed: 0.5 })).toBeNull();
+  });
+
+  test("a row missing randomKey (pre-backfill) is only reached via wraparound", async () => {
+    const t = convexTest(schema, modules);
+    // Simulates a legacy row written before `randomKey` shipped.
+    const { memeId: legacy } = await seedMeme(t, { randomKey: undefined });
+    const { memeId: modern } = await seedMeme(t, { randomKey: 0.5 });
+
+    // A seed at or below the modern key never reaches the legacy row...
+    expect(await t.query(api.memes.getRandomMeme, { seed: 0.5 })).toBe(modern);
+    // ...but a seed past every key wraps to the smallest — the missing field
+    // sorts first, so that's the legacy row.
+    expect(await t.query(api.memes.getRandomMeme, { seed: 0.99 })).toBe(legacy);
+  });
+});
+
+describe("backfillRandomKey", () => {
+  function backfillRandomKey(t: ReturnType<typeof convexTest>) {
+    return t.mutation(internal.memes.backfillRandomKey, {
+      paginationOpts: { numItems: 100, cursor: null },
+    });
+  }
+
+  test("patches rows missing randomKey and is idempotent on re-run", async () => {
+    const t = convexTest(schema, modules);
+    const { memeId } = await seedMeme(t, { randomKey: undefined });
+
+    expect(
+      (await t.run((ctx) => ctx.db.get(memeId)))?.randomKey,
+    ).toBeUndefined();
+
+    const first = await backfillRandomKey(t);
+    expect(first.isDone).toBe(true);
+    expect(first.patched).toBe(1);
+
+    const patchedKey = (await t.run((ctx) => ctx.db.get(memeId)))?.randomKey;
+    expect(typeof patchedKey).toBe("number");
+
+    const second = await backfillRandomKey(t);
+    expect(second.patched).toBe(0);
+    // Re-running never rewrites an already-assigned key.
+    expect((await t.run((ctx) => ctx.db.get(memeId)))?.randomKey).toBe(
+      patchedKey,
+    );
+  });
+
+  test("only backfills rows missing randomKey, skipping already-written ones", async () => {
+    const t = convexTest(schema, modules);
+    await seedMeme(t, { randomKey: undefined });
+    await seedMeme(t, { randomKey: undefined });
+    await seedMeme(t, { randomKey: 0.42 });
+
+    const result = await backfillRandomKey(t);
+    expect(result.patched).toBe(2);
+    expect(result.scanned).toBe(3);
+  });
+});
+
 const MB = 1024 * 1024;
 
 describe("createMeme", () => {
