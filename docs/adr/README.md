@@ -18,3 +18,4 @@ One file per decision. Numbered sequentially; supersede rather than rewrite past
 - [0014 - Random Meme Discovery via a Random-Key Index Seek](0014-random-meme-via-random-key-index-seek.md)
 - [0015 - Convex Http Action for Open Graph Unfurls](0015-convex-http-action-for-og-unfurls.md)
 - [0016 - Admin Role Management via a Dedicated `/admin/users` Route](0016-admin-role-management-route.md)
+- [0017 - Per-User Rate Limiting via the Convex Rate Limiter Component](0017-rate-limiting.md)

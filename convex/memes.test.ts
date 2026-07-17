@@ -1,6 +1,8 @@
 /// <reference types="vite/client" />
 import actionRetrier from "@convex-dev/action-retrier/test";
 import r2Test from "@convex-dev/r2/test";
+import { isRateLimitError } from "@convex-dev/rate-limiter";
+import rateLimiterTest from "@convex-dev/rate-limiter/test";
 import { convexTest } from "convex-test";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
@@ -465,6 +467,9 @@ describe("searchMemes", () => {
 
   test("a freshly published meme is searchable by its title and tags", async () => {
     const t = convexTest(schema, modules);
+    // `insertProcessingMeme` (called below) now checks the `uploadMeme` rate
+    // limit itself (#69, #79), so the component needs to be mounted here too.
+    rateLimiterTest.register(t);
     const userId = await t.run(async (ctx) =>
       ctx.db.insert("users", { name: "Publisher" }),
     );
@@ -492,6 +497,8 @@ describe("searchMemes", () => {
 
   test("an edited meme is searchable by its new title/tags, not its old ones", async () => {
     const t = convexTest(schema, modules);
+    // `updateMeme` (called below) checks the `updateMeme` rate limit (#69).
+    rateLimiterTest.register(t);
     // `seedMeme` inserts a raw row with no `searchText`, so it predates the
     // field and is invisible to search until a write recomputes it.
     const { userId, memeId } = await seedMeme(t, {
@@ -581,6 +588,9 @@ describe("backfillSearchText", () => {
 
   test("only backfills rows missing searchText, skipping already-written ones", async () => {
     const t = convexTest(schema, modules);
+    // `insertProcessingMeme` (called below) now checks the `uploadMeme` rate
+    // limit itself (#69, #79), so the component needs to be mounted here too.
+    rateLimiterTest.register(t);
     // Two legacy rows missing the field, plus one already written normally.
     await seedMeme(t, { title: "Legacy one", tags: [] });
     await seedMeme(t, { title: "Legacy two", tags: [] });
@@ -728,6 +738,9 @@ describe("createMeme", () => {
     // component references it nested at `r2/actionRetrier`. Register it there so
     // `deleteObject` (which the retrier drives) works in the orphan-cleanup path.
     actionRetrier.register(t, "r2/actionRetrier");
+    // `createMeme` checks the `uploadMeme` rate limit before doing anything
+    // else (#69), so every test here needs the component mounted too.
+    rateLimiterTest.register(t);
 
     const userId = await t.run(async (ctx) => {
       return await ctx.db.insert("users", { name: "Uploader" });
@@ -813,6 +826,32 @@ describe("createMeme", () => {
     expect(meme?.mediaKey).toBe("memes/cat.png");
     expect(meme?.upvoteCount).toBe(0);
     expect(meme?.downvoteCount).toBe(0);
+  });
+
+  test("exceeding the per-user upload rate limit throws a typed RateLimited error (#69)", async () => {
+    const { t, asUser } = await setup();
+
+    // `uploadMeme` (`convex/rateLimiter.ts`) is a 10/hour token bucket that
+    // starts full, so the 11th call in quick succession exhausts it.
+    for (let i = 0; i < 10; i++) {
+      const key = `memes/upload-${i}.png`;
+      await seedObject(t, key, "image/png", MB);
+      await asUser.action(api.memes.createMeme, { key, tags: [] });
+    }
+
+    // The check runs before any R2 metadata read, so the 11th key doesn't
+    // even need to exist for the rejection to happen.
+    const rejection = asUser.action(api.memes.createMeme, {
+      key: "memes/upload-10.png",
+      tags: [],
+    });
+    await expect(rejection).rejects.toThrow();
+    const error = await rejection.catch((e: unknown) => e);
+    expect(isRateLimitError(error)).toBe(true);
+    if (isRateLimitError(error)) {
+      expect(error.data.name).toBe("uploadMeme");
+      expect(error.data.retryAfter).toBeGreaterThan(0);
+    }
   });
 
   test("starts as processing before the lifecycle flip runs", async () => {
@@ -929,6 +968,37 @@ describe("createMeme", () => {
     expect(await allMemes(t)).toHaveLength(0);
   });
 
+  test("failed attempts do not consume the upload rate limit (#69, #79)", async () => {
+    const { t, asUser } = await setup();
+
+    // `uploadMeme` is a 10/hour token bucket. `createMeme` is an *action*, and
+    // its non-consuming `check` peek runs before the R2 metadata read — so an
+    // unsynced-object rejection here must never touch the bucket. Trip it more
+    // than the bucket's capacity to prove that: if any of these were secretly
+    // consuming a token, the bucket would already be exhausted and the final,
+    // valid create below would be rejected instead of succeeding.
+    for (let i = 0; i < 15; i++) {
+      await expect(
+        asUser.action(api.memes.createMeme, {
+          key: `memes/ghost-${i}.png`,
+          tags: [],
+        }),
+      ).rejects.toThrow();
+    }
+    expect(await allMemes(t)).toHaveLength(0);
+
+    // The token is only ever consumed atomically with a successful insert
+    // (inside `insertProcessingMeme`), so a valid upload right after those 15
+    // failures must still go through.
+    await seedObject(t, "memes/real.png", "image/png", MB);
+    const memeId = await asUser.action(api.memes.createMeme, {
+      key: "memes/real.png",
+      tags: [],
+    });
+
+    expect(await getMeme(t, memeId)).not.toBeNull();
+  });
+
   test("rejects an unauthenticated caller, leaving no meme", async () => {
     const { t } = await setup();
     await seedObject(t, "memes/anon.png", "image/png", MB);
@@ -951,6 +1021,8 @@ describe("updateMeme", () => {
 
   test("owner edits title, tags, and visibility; tags are canonicalized", async () => {
     const t = convexTest(schema, modules);
+    // `updateMeme` checks the `updateMeme` rate limit (#69).
+    rateLimiterTest.register(t);
     const { userId, memeId } = await seedMeme(t, {
       title: "Old",
       tags: ["old"],
@@ -973,6 +1045,8 @@ describe("updateMeme", () => {
 
   test("a blank title clears the stored title", async () => {
     const t = convexTest(schema, modules);
+    // `updateMeme` checks the `updateMeme` rate limit (#69).
+    rateLimiterTest.register(t);
     const { userId, memeId } = await seedMeme(t, { title: "Has a title" });
     const asOwner = t.withIdentity({ subject: `${userId}|session` });
 
@@ -1017,6 +1091,38 @@ describe("updateMeme", () => {
         visibility: "public",
       }),
     ).rejects.toThrow();
+  });
+
+  test("exceeding the per-user edit rate limit throws a typed RateLimited error (#69)", async () => {
+    const t = convexTest(schema, modules);
+    rateLimiterTest.register(t);
+    const { userId, memeId } = await seedMeme(t, { title: "Old" });
+    const asOwner = t.withIdentity({ subject: `${userId}|session` });
+
+    // `updateMeme` (`convex/rateLimiter.ts`) is a 30/hour token bucket that
+    // starts full, so the 31st call in quick succession exhausts it.
+    for (let i = 0; i < 30; i++) {
+      await asOwner.mutation(api.memes.updateMeme, {
+        memeId,
+        title: `Edit ${i}`,
+        tags: [],
+        visibility: "public",
+      });
+    }
+
+    const rejection = asOwner.mutation(api.memes.updateMeme, {
+      memeId,
+      title: "One too many",
+      tags: [],
+      visibility: "public",
+    });
+    await expect(rejection).rejects.toThrow();
+    const error = await rejection.catch((e: unknown) => e);
+    expect(isRateLimitError(error)).toBe(true);
+    if (isRateLimitError(error)) {
+      expect(error.data.name).toBe("updateMeme");
+      expect(error.data.retryAfter).toBeGreaterThan(0);
+    }
   });
 
   test("rejects editing an already-deleted meme", async () => {

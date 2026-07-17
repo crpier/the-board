@@ -167,6 +167,18 @@ The product should let guests browse public content immediately, let authenticat
   hidden in the UI — so the product can never end up with zero admins able to
   grant admin to anyone else.
 
+## Rate limiting
+
+- Uploading, voting, and editing are rate-limited per user to prevent a single
+  account from hammering the backend (scripted spam, vote-brigading, etc.).
+- Limits are generous enough that normal use never hits them: roughly 10
+  uploads/hour, 60 votes/minute, and 30 edits/hour (see
+  `docs/adr/0017-rate-limiting.md` for the exact configuration and rationale).
+- Hitting a limit does not lose the user's input: the form/action stays in
+  place and shows a friendly "try again in Xs" message rather than a raw
+  error.
+- Deleting and admin moderation are not rate-limited today.
+
 ## Design principles
 
 - Match the tone and information density of `mockups/index-mockup.html` closely.

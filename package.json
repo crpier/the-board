@@ -17,6 +17,7 @@
     "@auth/core": "0.37.0",
     "@convex-dev/auth": "^0.0.92",
     "@convex-dev/r2": "^0.10.2",
+    "@convex-dev/rate-limiter": "^0.3.2",
     "@solid-primitives/context": "^0.3.2",
     "@solidjs/meta": "^0.29.4",
     "@solidjs/router": "^0.16.1",

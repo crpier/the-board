@@ -13,6 +13,7 @@ import { ShareButton } from "~/components/ShareButton";
 import { ConfirmDialog } from "~/components/ConfirmDialog";
 import { VoteControl } from "~/components/VoteControl";
 import { useMutation } from "~/lib/convex-solid";
+import { friendlyErrorMessage } from "~/lib/errors";
 import { showUndoToast } from "~/lib/undo-toast";
 
 type Meme = FeedMeme;
@@ -311,7 +312,7 @@ function EditForm(props: { meme: Meme; onClose: () => void }) {
       });
       props.onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Save failed.");
+      setError(friendlyErrorMessage(err, "Save failed."));
     }
   }
 

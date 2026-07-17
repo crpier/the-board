@@ -15,6 +15,7 @@ import {
 import { type Viewer, getViewer } from "./authz";
 import { MEDIA_LIMITS, MEGABYTE, classifyMedia } from "./media";
 import { r2, resolveUrl } from "./r2";
+import { rateLimiter } from "./rateLimiter";
 import { mediaTypeValidator, visibilityValidator } from "./validators";
 
 /**
@@ -412,6 +413,18 @@ export const createMeme = action({
       throw new Error("You must be signed in to publish a meme.");
     }
 
+    // Per-user limit (#69, docs/adr/0017-rate-limiting.md). This is a
+    // non-consuming *peek* — `check`, not `limit` — so a caller who is already
+    // over budget gets rejected before any R2 work, without spending a token
+    // on the peek itself. The token that actually counts against the bucket is
+    // consumed atomically with the DB insert in `insertProcessingMeme`, not
+    // here: this is an action, and nested `ctx.runMutation` calls from an
+    // action commit independently of the action's own outcome, so consuming
+    // the token here would permanently charge the user even when a later
+    // validation step (e.g. a missing R2 object) rejects the upload. See
+    // docs/adr/0017-rate-limiting.md for the full argument.
+    await rateLimiter.check(ctx, "uploadMeme", { key: authorId, throws: true });
+
     // `syncMetadata` (run by the upload flow) persists the object's real
     // content-type and size; read them back as the source of truth.
     const metadata = await r2.getMetadata(ctx, args.key);
@@ -468,6 +481,22 @@ export const createMeme = action({
  * same transaction, so a meme is never persisted without its finalize step
  * queued. Internal-only: `authorId` is derived server-side by `createMeme` and
  * handed in, never accepted from a client.
+ *
+ * This is also where the `uploadMeme` token (#69, docs/adr/0017-rate-limiting.md)
+ * is *consumed* — not in `createMeme`. `createMeme` is an action, and a
+ * `ctx.runMutation` call from an action commits independently of the action:
+ * it does not roll back when the action later throws. Consuming the token in
+ * the action would therefore permanently charge a caller for an upload that
+ * still gets rejected by a later check (e.g. an unsynced R2 object), locking
+ * out legitimate users who simply retried a failed upload. Doing it here
+ * makes token consumption part of the same mutation transaction as the
+ * insert, so it only sticks when the meme is actually persisted.
+ *
+ * `skipRateLimit` exists solely for `seed.ts`, which calls this mutation
+ * directly (bypassing `createMeme` and its auth) to publish a batch of dev
+ * fixtures in one script run; that batch is typically larger than the
+ * 10/hour budget and seeding isn't a real user action, so it must not be
+ * throttled. No other caller should pass it.
  */
 export const insertProcessingMeme = internalMutation({
   args: {
@@ -477,9 +506,17 @@ export const insertProcessingMeme = internalMutation({
     title: v.optional(v.string()),
     tags: v.array(v.string()),
     visibility: visibilityValidator,
+    skipRateLimit: v.optional(v.boolean()),
   },
   returns: v.id("memes"),
   handler: async (ctx, args) => {
+    if (args.skipRateLimit !== true) {
+      await rateLimiter.limit(ctx, "uploadMeme", {
+        key: args.authorId,
+        throws: true,
+      });
+    }
+
     const memeId = await ctx.db.insert("memes", {
       title: args.title,
       // `args.tags` are already canonicalized by the caller (`createMeme`/seed).
@@ -571,7 +608,16 @@ export const updateMeme = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const viewerId = await getAuthUserId(ctx);
-    await requireOwnedMeme(ctx, args.memeId, viewerId);
+    const meme = await requireOwnedMeme(ctx, args.memeId, viewerId);
+
+    // Per-user limit (#69, docs/adr/0017-rate-limiting.md). Checked after
+    // ownership is confirmed, using `meme.authorId` (guaranteed equal to
+    // `viewerId` by `requireOwnedMeme`) so the key is typed as `Id<"users">`
+    // without a redundant null check on `viewerId`.
+    await rateLimiter.limit(ctx, "updateMeme", {
+      key: meme.authorId,
+      throws: true,
+    });
 
     const title = args.title?.trim() || undefined;
     const tags = canonicalizeTags(args.tags);
