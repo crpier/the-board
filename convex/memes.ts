@@ -11,6 +11,7 @@ import {
   mutation,
   query,
 } from "./_generated/server";
+import { type Viewer, getViewer } from "./authz";
 import { MEDIA_LIMITS, MEGABYTE, classifyMedia } from "./media";
 import { r2, resolveUrl } from "./r2";
 import { mediaTypeValidator, visibilityValidator } from "./validators";
@@ -102,24 +103,6 @@ async function toFeedMeme(
     upvoteCount: meme.upvoteCount,
     downvoteCount: meme.downvoteCount,
   };
-}
-
-/** The per-request viewer context shared by the feed-shaped queries. */
-type Viewer = { viewerId: Id<"users"> | null; isAdmin: boolean };
-
-/**
- * Resolve the requesting viewer once per query: their user id (or `null` for
- * guests) plus whether their user doc carries `isAdmin === true` (same read as
- * `viewer.current`). Admin status only feeds the `canModerate` UI flag and the
- * `moderateMeme` gate — it never changes which memes a query returns.
- */
-async function getViewer(ctx: QueryCtx): Promise<Viewer> {
-  const viewerId = await getAuthUserId(ctx);
-  if (viewerId === null) {
-    return { viewerId: null, isAdmin: false };
-  }
-  const user = await ctx.db.get(viewerId);
-  return { viewerId, isAdmin: user?.isAdmin === true };
 }
 
 export const listPublicMemes = query({

@@ -38,6 +38,17 @@ export default function Navbar() {
             >
               Upload
             </a>
+            {/* Admin-only entry point to role management (#68). No shared
+                `/admin` landing page — this links straight to its
+                self-contained route. */}
+            <Show when={viewer.data()?.isAdmin}>
+              <A
+                href="/admin/users"
+                class="text-sm text-[#5a5a6e] hover:text-[#63e6be]"
+              >
+                Users
+              </A>
+            </Show>
             <Show when={viewer.data()}>
               {(user) => (
                 // The avatar + name doubles as the entry point to profile
