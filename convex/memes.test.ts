@@ -1,6 +1,8 @@
 /// <reference types="vite/client" />
 import actionRetrier from "@convex-dev/action-retrier/test";
 import r2Test from "@convex-dev/r2/test";
+import { isRateLimitError } from "@convex-dev/rate-limiter";
+import rateLimiterTest from "@convex-dev/rate-limiter/test";
 import { convexTest } from "convex-test";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
@@ -465,6 +467,9 @@ describe("searchMemes", () => {
 
   test("a freshly published meme is searchable by its title and tags", async () => {
     const t = convexTest(schema, modules);
+    // `insertProcessingMeme` (called below) now checks the `uploadMeme` rate
+    // limit itself (#69, #79), so the component needs to be mounted here too.
+    rateLimiterTest.register(t);
     const userId = await t.run(async (ctx) =>
       ctx.db.insert("users", { name: "Publisher" }),
     );
@@ -492,6 +497,8 @@ describe("searchMemes", () => {
 
   test("an edited meme is searchable by its new title/tags, not its old ones", async () => {
     const t = convexTest(schema, modules);
+    // `updateMeme` (called below) checks the `updateMeme` rate limit (#69).
+    rateLimiterTest.register(t);
     // `seedMeme` inserts a raw row with no `searchText`, so it predates the
     // field and is invisible to search until a write recomputes it.
     const { userId, memeId } = await seedMeme(t, {
@@ -581,6 +588,9 @@ describe("backfillSearchText", () => {
 
   test("only backfills rows missing searchText, skipping already-written ones", async () => {
     const t = convexTest(schema, modules);
+    // `insertProcessingMeme` (called below) now checks the `uploadMeme` rate
+    // limit itself (#69, #79), so the component needs to be mounted here too.
+    rateLimiterTest.register(t);
     // Two legacy rows missing the field, plus one already written normally.
     await seedMeme(t, { title: "Legacy one", tags: [] });
     await seedMeme(t, { title: "Legacy two", tags: [] });
@@ -604,6 +614,115 @@ describe("backfillSearchText", () => {
   });
 });
 
+describe("getRandomMeme", () => {
+  test("seeks the first public+ready meme at or past the seed's randomKey", async () => {
+    const t = convexTest(schema, modules);
+    const { memeId: low } = await seedMeme(t, { randomKey: 0.1 });
+    const { memeId: mid } = await seedMeme(t, { randomKey: 0.5 });
+    const { memeId: high } = await seedMeme(t, { randomKey: 0.9 });
+
+    expect(await t.query(api.memes.getRandomMeme, { seed: 0.4 })).toBe(mid);
+    expect(await t.query(api.memes.getRandomMeme, { seed: 0.5 })).toBe(mid);
+    expect(await t.query(api.memes.getRandomMeme, { seed: 0.51 })).toBe(high);
+    expect(await t.query(api.memes.getRandomMeme, { seed: 0 })).toBe(low);
+  });
+
+  test("wraps around to the smallest randomKey when the seed is past the highest key", async () => {
+    const t = convexTest(schema, modules);
+    const { memeId: low } = await seedMeme(t, { randomKey: 0.1 });
+    await seedMeme(t, { randomKey: 0.5 });
+
+    expect(await t.query(api.memes.getRandomMeme, { seed: 0.99 })).toBe(low);
+  });
+
+  test("never returns a private, non-ready, or deleted meme", async () => {
+    const t = convexTest(schema, modules);
+    await seedMeme(t, {
+      randomKey: 0.2,
+      visibility: "private",
+    });
+    await seedMeme(t, {
+      randomKey: 0.3,
+      status: "processing",
+    });
+    await seedMeme(t, {
+      randomKey: 0.4,
+      status: "deleted",
+    });
+    const { memeId: onlyVisible } = await seedMeme(t, { randomKey: 0.6 });
+
+    // Every seed, including ones that land closer to the hidden rows' keys,
+    // must resolve to the one public+ready meme.
+    for (const seed of [0, 0.15, 0.25, 0.35, 0.45, 0.6, 0.99]) {
+      expect(await t.query(api.memes.getRandomMeme, { seed })).toBe(
+        onlyVisible,
+      );
+    }
+  });
+
+  test("returns null when there are no public, ready memes", async () => {
+    const t = convexTest(schema, modules);
+    await seedMeme(t, { visibility: "private", randomKey: 0.5 });
+
+    expect(await t.query(api.memes.getRandomMeme, { seed: 0.5 })).toBeNull();
+  });
+
+  test("a row missing randomKey (pre-backfill) is only reached via wraparound", async () => {
+    const t = convexTest(schema, modules);
+    // Simulates a legacy row written before `randomKey` shipped.
+    const { memeId: legacy } = await seedMeme(t, { randomKey: undefined });
+    const { memeId: modern } = await seedMeme(t, { randomKey: 0.5 });
+
+    // A seed at or below the modern key never reaches the legacy row...
+    expect(await t.query(api.memes.getRandomMeme, { seed: 0.5 })).toBe(modern);
+    // ...but a seed past every key wraps to the smallest — the missing field
+    // sorts first, so that's the legacy row.
+    expect(await t.query(api.memes.getRandomMeme, { seed: 0.99 })).toBe(legacy);
+  });
+});
+
+describe("backfillRandomKey", () => {
+  function backfillRandomKey(t: ReturnType<typeof convexTest>) {
+    return t.mutation(internal.memes.backfillRandomKey, {
+      paginationOpts: { numItems: 100, cursor: null },
+    });
+  }
+
+  test("patches rows missing randomKey and is idempotent on re-run", async () => {
+    const t = convexTest(schema, modules);
+    const { memeId } = await seedMeme(t, { randomKey: undefined });
+
+    expect(
+      (await t.run((ctx) => ctx.db.get(memeId)))?.randomKey,
+    ).toBeUndefined();
+
+    const first = await backfillRandomKey(t);
+    expect(first.isDone).toBe(true);
+    expect(first.patched).toBe(1);
+
+    const patchedKey = (await t.run((ctx) => ctx.db.get(memeId)))?.randomKey;
+    expect(typeof patchedKey).toBe("number");
+
+    const second = await backfillRandomKey(t);
+    expect(second.patched).toBe(0);
+    // Re-running never rewrites an already-assigned key.
+    expect((await t.run((ctx) => ctx.db.get(memeId)))?.randomKey).toBe(
+      patchedKey,
+    );
+  });
+
+  test("only backfills rows missing randomKey, skipping already-written ones", async () => {
+    const t = convexTest(schema, modules);
+    await seedMeme(t, { randomKey: undefined });
+    await seedMeme(t, { randomKey: undefined });
+    await seedMeme(t, { randomKey: 0.42 });
+
+    const result = await backfillRandomKey(t);
+    expect(result.patched).toBe(2);
+    expect(result.scanned).toBe(3);
+  });
+});
+
 const MB = 1024 * 1024;
 
 describe("createMeme", () => {
@@ -619,6 +738,9 @@ describe("createMeme", () => {
     // component references it nested at `r2/actionRetrier`. Register it there so
     // `deleteObject` (which the retrier drives) works in the orphan-cleanup path.
     actionRetrier.register(t, "r2/actionRetrier");
+    // `createMeme` checks the `uploadMeme` rate limit before doing anything
+    // else (#69), so every test here needs the component mounted too.
+    rateLimiterTest.register(t);
 
     const userId = await t.run(async (ctx) => {
       return await ctx.db.insert("users", { name: "Uploader" });
@@ -704,6 +826,32 @@ describe("createMeme", () => {
     expect(meme?.mediaKey).toBe("memes/cat.png");
     expect(meme?.upvoteCount).toBe(0);
     expect(meme?.downvoteCount).toBe(0);
+  });
+
+  test("exceeding the per-user upload rate limit throws a typed RateLimited error (#69)", async () => {
+    const { t, asUser } = await setup();
+
+    // `uploadMeme` (`convex/rateLimiter.ts`) is a 10/hour token bucket that
+    // starts full, so the 11th call in quick succession exhausts it.
+    for (let i = 0; i < 10; i++) {
+      const key = `memes/upload-${i}.png`;
+      await seedObject(t, key, "image/png", MB);
+      await asUser.action(api.memes.createMeme, { key, tags: [] });
+    }
+
+    // The check runs before any R2 metadata read, so the 11th key doesn't
+    // even need to exist for the rejection to happen.
+    const rejection = asUser.action(api.memes.createMeme, {
+      key: "memes/upload-10.png",
+      tags: [],
+    });
+    await expect(rejection).rejects.toThrow();
+    const error = await rejection.catch((e: unknown) => e);
+    expect(isRateLimitError(error)).toBe(true);
+    if (isRateLimitError(error)) {
+      expect(error.data.name).toBe("uploadMeme");
+      expect(error.data.retryAfter).toBeGreaterThan(0);
+    }
   });
 
   test("starts as processing before the lifecycle flip runs", async () => {
@@ -820,6 +968,37 @@ describe("createMeme", () => {
     expect(await allMemes(t)).toHaveLength(0);
   });
 
+  test("failed attempts do not consume the upload rate limit (#69, #79)", async () => {
+    const { t, asUser } = await setup();
+
+    // `uploadMeme` is a 10/hour token bucket. `createMeme` is an *action*, and
+    // its non-consuming `check` peek runs before the R2 metadata read — so an
+    // unsynced-object rejection here must never touch the bucket. Trip it more
+    // than the bucket's capacity to prove that: if any of these were secretly
+    // consuming a token, the bucket would already be exhausted and the final,
+    // valid create below would be rejected instead of succeeding.
+    for (let i = 0; i < 15; i++) {
+      await expect(
+        asUser.action(api.memes.createMeme, {
+          key: `memes/ghost-${i}.png`,
+          tags: [],
+        }),
+      ).rejects.toThrow();
+    }
+    expect(await allMemes(t)).toHaveLength(0);
+
+    // The token is only ever consumed atomically with a successful insert
+    // (inside `insertProcessingMeme`), so a valid upload right after those 15
+    // failures must still go through.
+    await seedObject(t, "memes/real.png", "image/png", MB);
+    const memeId = await asUser.action(api.memes.createMeme, {
+      key: "memes/real.png",
+      tags: [],
+    });
+
+    expect(await getMeme(t, memeId)).not.toBeNull();
+  });
+
   test("rejects an unauthenticated caller, leaving no meme", async () => {
     const { t } = await setup();
     await seedObject(t, "memes/anon.png", "image/png", MB);
@@ -842,6 +1021,8 @@ describe("updateMeme", () => {
 
   test("owner edits title, tags, and visibility; tags are canonicalized", async () => {
     const t = convexTest(schema, modules);
+    // `updateMeme` checks the `updateMeme` rate limit (#69).
+    rateLimiterTest.register(t);
     const { userId, memeId } = await seedMeme(t, {
       title: "Old",
       tags: ["old"],
@@ -864,6 +1045,8 @@ describe("updateMeme", () => {
 
   test("a blank title clears the stored title", async () => {
     const t = convexTest(schema, modules);
+    // `updateMeme` checks the `updateMeme` rate limit (#69).
+    rateLimiterTest.register(t);
     const { userId, memeId } = await seedMeme(t, { title: "Has a title" });
     const asOwner = t.withIdentity({ subject: `${userId}|session` });
 
@@ -908,6 +1091,38 @@ describe("updateMeme", () => {
         visibility: "public",
       }),
     ).rejects.toThrow();
+  });
+
+  test("exceeding the per-user edit rate limit throws a typed RateLimited error (#69)", async () => {
+    const t = convexTest(schema, modules);
+    rateLimiterTest.register(t);
+    const { userId, memeId } = await seedMeme(t, { title: "Old" });
+    const asOwner = t.withIdentity({ subject: `${userId}|session` });
+
+    // `updateMeme` (`convex/rateLimiter.ts`) is a 30/hour token bucket that
+    // starts full, so the 31st call in quick succession exhausts it.
+    for (let i = 0; i < 30; i++) {
+      await asOwner.mutation(api.memes.updateMeme, {
+        memeId,
+        title: `Edit ${i}`,
+        tags: [],
+        visibility: "public",
+      });
+    }
+
+    const rejection = asOwner.mutation(api.memes.updateMeme, {
+      memeId,
+      title: "One too many",
+      tags: [],
+      visibility: "public",
+    });
+    await expect(rejection).rejects.toThrow();
+    const error = await rejection.catch((e: unknown) => e);
+    expect(isRateLimitError(error)).toBe(true);
+    if (isRateLimitError(error)) {
+      expect(error.data.name).toBe("updateMeme");
+      expect(error.data.retryAfter).toBeGreaterThan(0);
+    }
   });
 
   test("rejects editing an already-deleted meme", async () => {
@@ -1129,17 +1344,22 @@ describe("deleteMeme", () => {
     });
   }
 
-  test("owner delete tombstones the meme, reclaims the object, keeps votes", async () => {
+  test("owner delete tombstones the meme, schedules a reclaim, keeps votes and the object", async () => {
     const { t, userId, memeId, key, asOwner } = await setup();
     // A vote that must survive the delete (tombstone leaves rows in place).
     await t.run(async (ctx) => {
       await ctx.db.insert("votes", { userId, memeId, value: "up" });
     });
 
-    await asOwner.action(api.memes.deleteMeme, { memeId });
+    await asOwner.mutation(api.memes.deleteMeme, { memeId });
 
-    expect((await getMeme(t, memeId))?.status).toBe("deleted");
-    expect(await objectExists(t, key)).toBe(false);
+    const meme = await getMeme(t, memeId);
+    expect(meme?.status).toBe("deleted");
+    expect(meme?.deletedAt).toBeTypeOf("number");
+    // The reclaim job is scheduled, not run inline — deleteMeme is a plain
+    // mutation now, so the object is untouched until the window elapses.
+    expect(meme?.reclaimJobId).toBeDefined();
+    expect(await objectExists(t, key)).toBe(true);
     const votes = await t.run(async (ctx) =>
       ctx.db
         .query("votes")
@@ -1157,7 +1377,7 @@ describe("deleteMeme", () => {
     const asIntruder = t.withIdentity({ subject: `${intruderId}|session` });
 
     await expect(
-      asIntruder.action(api.memes.deleteMeme, { memeId }),
+      asIntruder.mutation(api.memes.deleteMeme, { memeId }),
     ).rejects.toThrow();
 
     expect((await getMeme(t, memeId))?.status).toBe("ready");
@@ -1167,9 +1387,165 @@ describe("deleteMeme", () => {
   test("rejects an unauthenticated caller, leaving the meme and object intact", async () => {
     const { t, memeId, key } = await setup();
 
-    await expect(t.action(api.memes.deleteMeme, { memeId })).rejects.toThrow();
+    await expect(
+      t.mutation(api.memes.deleteMeme, { memeId }),
+    ).rejects.toThrow();
 
     expect((await getMeme(t, memeId))?.status).toBe("ready");
     expect(await objectExists(t, key)).toBe(true);
+  });
+});
+
+describe("restoreMeme and the reclaim window", () => {
+  /**
+   * Same setup as `deleteMeme`, plus a helper to run the reclaim job directly.
+   * `deleteMeme` schedules `reclaimDeletedMeme` a full `DELETE_UNDO_WINDOW_MS`
+   * (24h) out via a real `setTimeout` under convex-test, so nothing short of
+   * fake-timer surgery makes it fire on its own in a test process. Invoking the
+   * internal action directly is the documented way to simulate "the window
+   * elapsed" without waiting 24 real hours.
+   */
+  async function setup(key = "memes/del.png") {
+    const t = convexTest(schema, modules);
+    r2Test.register(t);
+    actionRetrier.register(t, "r2/actionRetrier");
+
+    const { userId, memeId } = await seedMeme(t, { mediaKey: key });
+    await t.run(async (ctx) => {
+      await ctx.runMutation(components.r2.lib.upsertMetadata, {
+        key,
+        bucket: "test-bucket",
+        contentType: "image/png",
+        size: MB,
+        lastModified: new Date().toISOString(),
+        link: `https://dash.example/objects/${key}/details`,
+      });
+    });
+
+    const asOwner = t.withIdentity({ subject: `${userId}|session` });
+    await asOwner.mutation(api.memes.deleteMeme, { memeId });
+
+    return { t, userId, memeId, key, asOwner };
+  }
+
+  function getMeme(t: ReturnType<typeof convexTest>, memeId: Id<"memes">) {
+    return t.run(async (ctx) => ctx.db.get(memeId));
+  }
+
+  function objectExists(t: ReturnType<typeof convexTest>, key: string) {
+    return t.run(async (ctx) => {
+      const metadata = await ctx.runQuery(components.r2.lib.getMetadata, {
+        key,
+        bucket: "test-bucket",
+        endpoint: process.env.R2_ENDPOINT!,
+        accessKeyId: process.env.R2_ACCESS_KEY_ID!,
+        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
+      });
+      return metadata !== null;
+    });
+  }
+
+  function runReclaim(t: ReturnType<typeof convexTest>, memeId: Id<"memes">) {
+    return t.action(internal.memes.reclaimDeletedMeme, { memeId });
+  }
+
+  test("restoring within the window flips the meme back to ready and leaves the object alone", async () => {
+    const { t, memeId, key, asOwner } = await setup();
+
+    await asOwner.mutation(api.memes.restoreMeme, { memeId });
+
+    const meme = await getMeme(t, memeId);
+    expect(meme?.status).toBe("ready");
+    expect(meme?.deletedAt).toBeUndefined();
+    expect(meme?.reclaimJobId).toBeUndefined();
+    expect(await objectExists(t, key)).toBe(true);
+  });
+
+  test("restoring cancels the reclaim job, so a late-firing job is a no-op", async () => {
+    const { t, memeId, key, asOwner } = await setup();
+
+    await asOwner.mutation(api.memes.restoreMeme, { memeId });
+    // Simulate the original job still firing (e.g. a race with the cancel);
+    // `finalizeReclaim`'s guard must no-op rather than reclaim a live meme.
+    await runReclaim(t, memeId);
+
+    const meme = await getMeme(t, memeId);
+    expect(meme?.status).toBe("ready");
+    expect(await objectExists(t, key)).toBe(true);
+  });
+
+  test("once the window elapses, the object is reclaimed and restore is no longer possible", async () => {
+    const { t, memeId, key, asOwner } = await setup();
+
+    await runReclaim(t, memeId);
+
+    expect(await objectExists(t, key)).toBe(false);
+    const meme = await getMeme(t, memeId);
+    expect(meme?.status).toBe("deleted");
+    expect(meme?.reclaimJobId).toBeUndefined();
+
+    await expect(
+      asOwner.mutation(api.memes.restoreMeme, { memeId }),
+    ).rejects.toThrow("This meme can no longer be restored.");
+  });
+
+  test("a re-run of the reclaim job after it already ran is a no-op, not a double-delete error", async () => {
+    const { t, memeId, key } = await setup();
+
+    await runReclaim(t, memeId);
+    expect(await objectExists(t, key)).toBe(false);
+
+    // Should resolve cleanly, not throw trying to delete an already-gone object.
+    await expect(runReclaim(t, memeId)).resolves.toBeNull();
+  });
+
+  test("rejects restoring a meme that was never deleted", async () => {
+    const t = convexTest(schema, modules);
+    const { userId, memeId } = await seedMeme(t);
+    const asOwner = t.withIdentity({ subject: `${userId}|session` });
+
+    await expect(
+      asOwner.mutation(api.memes.restoreMeme, { memeId }),
+    ).rejects.toThrow("This meme can no longer be restored.");
+  });
+
+  test("rejects a non-owner restoring a deleted meme, leaving it deleted", async () => {
+    const { t, memeId } = await setup();
+    const intruderId = await t.run(async (ctx) =>
+      ctx.db.insert("users", { name: "Intruder" }),
+    );
+    const asIntruder = t.withIdentity({ subject: `${intruderId}|session` });
+
+    await expect(
+      asIntruder.mutation(api.memes.restoreMeme, { memeId }),
+    ).rejects.toThrow();
+
+    expect((await getMeme(t, memeId))?.status).toBe("deleted");
+  });
+
+  test("rejects an unauthenticated restore attempt", async () => {
+    const { t, memeId } = await setup();
+
+    await expect(
+      t.mutation(api.memes.restoreMeme, { memeId }),
+    ).rejects.toThrow();
+
+    expect((await getMeme(t, memeId))?.status).toBe("deleted");
+  });
+
+  test("restored memes are visible in the public feed again", async () => {
+    const { t, memeId, asOwner } = await setup();
+
+    expect(
+      (await t.query(api.memes.listPublicMemes, firstPage)).page,
+    ).toHaveLength(0);
+
+    await asOwner.mutation(api.memes.restoreMeme, { memeId });
+
+    expect(
+      (await t.query(api.memes.listPublicMemes, firstPage)).page.map(
+        (m) => m._id,
+      ),
+    ).toContain(memeId);
   });
 });

@@ -1,7 +1,7 @@
 # ADR 0012 - Admin Moderation as a Visibility Mutation in the Normal UI
 
 Date: 2026-07-05
-Status: partially superseded by [ADR 0013](0013-user-reporting-and-admin-review-queue.md) —
+Status: partially superseded by [ADR 0018](0018-user-reporting-and-admin-review-queue.md) —
 the "no `/admin` route, review queue, or other console surface" call below no
 longer holds once reports need somewhere to land. The rest of this record
 (the `moderateMeme` mutation, its opaque-denial shape, and the inline

@@ -1,4 +1,6 @@
 /// <reference types="vite/client" />
+import { isRateLimitError } from "@convex-dev/rate-limiter";
+import rateLimiterTest from "@convex-dev/rate-limiter/test";
 import { convexTest } from "convex-test";
 import { describe, expect, test } from "vitest";
 
@@ -16,6 +18,7 @@ const modules = import.meta.glob("./**/*.ts");
  */
 async function setup(memeOverrides: Record<string, unknown> = {}) {
   const t = convexTest(schema, modules);
+  rateLimiterTest.register(t);
 
   const userId = await t.run(async (ctx) => {
     return await ctx.db.insert("users", { name: "Tester" });
@@ -236,6 +239,33 @@ describe("castVote", () => {
 
     await asUser.mutation(api.votes.castVote, { memeId, value: "down" });
     await assertInvariant(0, 0);
+  });
+
+  test("exceeding the per-user vote rate limit throws a typed RateLimited error (#69)", async () => {
+    const { memeId, asUser } = await setup();
+
+    // `castVote` (`convex/rateLimiter.ts`) is a 60/minute token bucket that
+    // starts full, so the 61st call in quick succession (no real time
+    // elapses between awaits in a test) exhausts it. Alternate up/down so
+    // every call is a distinct toggle rather than repeated no-ops.
+    for (let i = 0; i < 60; i++) {
+      await asUser.mutation(api.votes.castVote, {
+        memeId,
+        value: i % 2 === 0 ? "up" : "down",
+      });
+    }
+
+    const rejection = asUser.mutation(api.votes.castVote, {
+      memeId,
+      value: "up",
+    });
+    await expect(rejection).rejects.toThrow();
+    const error = await rejection.catch((e: unknown) => e);
+    expect(isRateLimitError(error)).toBe(true);
+    if (isRateLimitError(error)) {
+      expect(error.data.name).toBe("castVote");
+      expect(error.data.retryAfter).toBeGreaterThan(0);
+    }
   });
 
   test("aggregate counts equal the number of vote rows across users", async () => {

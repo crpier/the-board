@@ -3,10 +3,10 @@ import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 
 import { mutation, query } from "./_generated/server";
+import { getViewer } from "./authz";
 import { applyModerationVisibility } from "./memes";
 import { resolveUrl } from "./r2";
 import { mediaTypeValidator, reportReasonValidator } from "./validators";
-import { getViewer } from "./viewer";
 
 /**
  * One row of the admin review queue: a report plus just enough resolved

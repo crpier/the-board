@@ -1,34 +1,9 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
-import type { Id } from "./_generated/dataModel";
-import { type QueryCtx, mutation, query } from "./_generated/server";
+import { mutation, query } from "./_generated/server";
 // Shared with the settings form via the backend-free `convex/profile.ts`
 // (ADR 0008) — the client must not import this server module for the cap.
 import { MAX_DISPLAY_NAME_LENGTH } from "./profile";
-
-/** The per-request viewer context shared by every admin- or identity-gated query/mutation. */
-export type Viewer = { viewerId: Id<"users"> | null; isAdmin: boolean };
-
-/**
- * Resolve the requesting viewer once per query/mutation: their user id (or
- * `null` for guests) plus whether their user doc carries `isAdmin === true`
- * (same read as `viewer.current`).
- *
- * Shared by every admin-gated surface — `memes.moderateMeme` (#56) and the
- * reporting queue (`reports.ts`, #67) both call this instead of re-deriving
- * admin status, so the admin check can't drift between them. Feed-shaped
- * queries additionally use `viewerId`/`isAdmin` to compute the purely
- * UI-facing `isOwner`/`canModerate` flags — this helper never widens what any
- * query returns on its own.
- */
-export async function getViewer(ctx: QueryCtx): Promise<Viewer> {
-  const viewerId = await getAuthUserId(ctx);
-  if (viewerId === null) {
-    return { viewerId: null, isAdmin: false };
-  }
-  const user = await ctx.db.get(viewerId);
-  return { viewerId, isAdmin: user?.isAdmin === true };
-}
 
 export const current = query({
   args: {},

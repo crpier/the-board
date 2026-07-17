@@ -29,7 +29,11 @@ export default defineSchema({
     isAdmin: v.optional(v.boolean()),
   })
     .index("email", ["email"])
-    .index("phone", ["phone"]),
+    .index("phone", ["phone"])
+    // Backs the admin roster (`users.listUsers`, #68) and the last-admin
+    // guard in `demoteUser`, which needs a cheap "how many admins are there"
+    // check without a table scan.
+    .index("by_isAdmin", ["isAdmin"]),
   memes: defineTable({
     title: v.optional(v.string()),
     // Denormalized full-text search blob: title + canonicalized tags joined by
@@ -38,6 +42,13 @@ export default defineSchema({
     // backfill populates pre-existing rows; a missing value simply never
     // matches a search.
     searchText: v.optional(v.string()),
+    // Uniform-random tiebreaker (ADR 0014) backing the "Random" nav action
+    // (#66). Assigned once at insert (`Math.random()`) and never rewritten, so
+    // it has no relation to recency or any other field. Optional for the same
+    // reason `searchText` is: the field ships before the backfill populates
+    // pre-existing rows, and a missing value is treated as sorting first
+    // (reachable via `getRandomMeme`'s wraparound, not lost).
+    randomKey: v.optional(v.number()),
     visibility: visibilityValidator,
     status: v.union(
       v.literal("draft"),
@@ -51,6 +62,16 @@ export default defineSchema({
     mediaKey: v.string(),
     mediaType: mediaTypeValidator,
     tags: v.array(v.string()),
+    // When a `deleted` meme was tombstoned (ADR 0009). Undefined for every
+    // non-deleted meme. Paired with `reclaimJobId` to gate the undo window: set
+    // together by `deleteMeme`, cleared together by `restoreMeme`.
+    deletedAt: v.optional(v.number()),
+    // Id of the scheduled `reclaimDeletedMeme` job that will delete the R2
+    // object once the undo window elapses. Its presence *is* the undo window:
+    // `restoreMeme` requires it (and cancels it), and the reclaim job clears it
+    // before touching R2 so a restored meme can never be reclaimed out from
+    // under the owner. Undefined once reclaimed (or for a never-deleted meme).
+    reclaimJobId: v.optional(v.id("_scheduled_functions")),
     // Authoritative author reference. Display name is resolved live from the
     // user row (`displayName ?? name`) at read time, never denormalized onto
     // the meme.
@@ -59,6 +80,14 @@ export default defineSchema({
     downvoteCount: v.number(),
   })
     .index("by_visibility_and_status", ["visibility", "status"])
+    // Backs `getRandomMeme` (#66, ADR 0014): a random-key index seek instead of
+    // a full table scan. `randomKey` must be last so `.gte("randomKey", seed)`
+    // seeks within the public+ready partition in index order.
+    .index("by_visibility_and_status_and_randomKey", [
+      "visibility",
+      "status",
+      "randomKey",
+    ])
     .index("by_author", ["authorId"])
     .index("by_author_and_status", ["authorId", "status"])
     .index("by_author_and_visibility_and_status", [

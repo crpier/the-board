@@ -4,6 +4,7 @@ import { Title } from "@solidjs/meta";
 import { Show, createSignal, onCleanup } from "solid-js";
 import { useConvexAuth } from "~/lib/convex-auth-solid";
 import { useAction, useMutation } from "~/lib/convex-solid";
+import { friendlyErrorMessage } from "~/lib/errors";
 import { type FileCheck, putToR2, validateFile } from "~/lib/upload";
 
 type Visibility = "public" | "private";
@@ -127,7 +128,7 @@ function UploadForm() {
       });
       setPhase("posted");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Upload failed.");
+      setError(friendlyErrorMessage(err, "Upload failed."));
       setPhase("idle");
     }
   }

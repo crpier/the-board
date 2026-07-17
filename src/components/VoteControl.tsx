@@ -1,9 +1,12 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
+import { isRateLimitError } from "@convex-dev/rate-limiter";
 import type { OptimisticUpdate } from "convex/browser";
 import { ArrowBigDown, ArrowBigUp } from "lucide-solid";
+import { Show, createSignal } from "solid-js";
 import { useConvexAuth } from "~/lib/convex-auth-solid";
 import { useMutation, useQuery } from "~/lib/convex-solid";
+import { friendlyErrorMessage } from "~/lib/errors";
 
 type VoteValue = "up" | "down";
 type CastVoteArgs = { memeId: Id<"memes">; value: VoteValue };
@@ -75,6 +78,7 @@ export function VoteControl(props: {
   const auth = useConvexAuth()!;
   const state = useQuery(api.votes.cardState, () => ({ memeId: props.memeId }));
   const castVote = useMutation(api.votes.castVote, optimisticCastVote);
+  const [error, setError] = createSignal<string | null>(null);
 
   // `cardState` is the source of truth once it resolves; fall back to the feed
   // item's counts for the first paint (and if the meme is later hidden -> null).
@@ -87,8 +91,15 @@ export function VoteControl(props: {
 
   const vote = (value: VoteValue) => {
     if (!auth.isAuthenticated()) return;
-    void castVote.mutate({ memeId: props.memeId, value }).catch(() => {
-      // Optimistic update self-reverts on failure; nothing to do here.
+    setError(null);
+    void castVote.mutate({ memeId: props.memeId, value }).catch((err) => {
+      // Optimistic update self-reverts on any failure; only a rate limit (the
+      // one error a rapid-clicking voter can realistically hit) is worth
+      // telling them about (#69) — anything else is quietly left to the
+      // revert, matching the prior no-message behavior.
+      if (isRateLimitError(err)) {
+        setError(friendlyErrorMessage(err, "Vote failed."));
+      }
     });
   };
 
@@ -141,6 +152,12 @@ export function VoteControl(props: {
         <ArrowBigDown class="h-4 w-4" />
         {counts().downvoteCount}
       </button>
+
+      <Show when={error()}>
+        {(message) => (
+          <span class="text-[11px] text-[#ff8787]">{message()}</span>
+        )}
+      </Show>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-# ADR 0013 - User Reporting and an Admin Review Queue at `/admin`
+# ADR 0018 - User Reporting and an Admin Review Queue at `/admin`
 
 Date: 2026-07-17
 Status: accepted
@@ -55,10 +55,10 @@ throws the same opaque `"Not found."` a non-admin gets everywhere else in the
 app; the client-side flag is convenience, not the security boundary.
 
 **Authorization is centralized, not duplicated.** `getViewer` (viewer id +
-`isAdmin`) moved from a private helper in `convex/memes.ts` to
-`convex/viewer.ts` and is now imported by both `memes.ts` and the new
-`convex/reports.ts`, so the admin check can't drift between the two admin
-surfaces.
+`isAdmin`) already lives in `convex/authz.ts` (ADR 0016, landed alongside
+admin role management) and `reports.ts` imports it from there rather than
+re-deriving admin status locally, so the admin check can't drift across
+`memes.ts`, `users.ts`, and `reports.ts`.
 
 **The page is structured as tabs, with only "Reports" implemented.** `#58`
 and `#59` are expected to add their own review-item types as sibling tabs

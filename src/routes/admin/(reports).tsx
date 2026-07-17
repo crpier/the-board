@@ -10,7 +10,7 @@ import { useQuery } from "~/lib/convex-solid";
 /**
  * Admin console entry point (`/admin`, #67). This reverses ADR 0012's "no
  * separate admin console" stance now that a review queue needs somewhere to
- * live — see ADR 0013.
+ * live — see ADR 0018.
  *
  * Gated on `viewer.current().isAdmin`, the same flag `MemeCard` already reads
  * to show `canModerate` (ADR 0012): a client-side UX gate only. Every admin
@@ -21,9 +21,17 @@ import { useQuery } from "~/lib/convex-solid";
  *
  * Built as tabs (currently just "Reports") so a future review-item type —
  * #58's duplicate findings, #59's AI-moderation restores — can add a sibling
- * tab here without reworking this shell. A parallel branch is separately
- * adding admin user management; this page stays scoped to the reports queue
- * and leaves room for that to land as another tab.
+ * tab here without reworking this shell.
+ *
+ * Filename is `(reports).tsx`, not `index.tsx` or a sibling `admin.tsx`: this
+ * route lives in the `admin/` directory alongside `users.tsx` (`/admin/users`,
+ * ADR 0016), and SolidStart's file router nests any route whose path is a
+ * literal prefix of another (`/admin` would otherwise become a layout
+ * ancestor of `/admin/users`, silently swallowing that page since this
+ * component never renders `props.children`). The parenthesized segment is a
+ * route group — excluded from the URL, so this still resolves to `/admin` —
+ * that breaks the prefix match, keeping the two admin pages as independent,
+ * self-contained routes per ADR 0016.
  */
 type AdminTab = "reports";
 

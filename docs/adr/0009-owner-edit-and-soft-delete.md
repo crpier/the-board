@@ -1,7 +1,8 @@
 # ADR 0009 - Owner Edit and Soft-Delete with R2 Reclamation
 
 Date: 2026-06-29
-Status: accepted
+Status: accepted (delete's R2-reclaim timing superseded by
+[ADR 0013](0013-delayed-r2-reclaim-and-delete-undo-window.md))
 
 ## Context
 
