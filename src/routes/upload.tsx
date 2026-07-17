@@ -187,7 +187,7 @@ function UploadForm() {
               }
             >
               {(f) => (
-                <span class="text-sm">
+                <span class="block max-w-full text-sm break-words">
                   {f().name}{" "}
                   <span class="text-[#5a5a6e]">
                     ({(f().size / (1024 * 1024)).toFixed(1)} MB)
