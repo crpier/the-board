@@ -65,6 +65,11 @@ The product should let guests browse public content immediately, let authenticat
 - Tags are a discovery tool: a meme's tags are searchable terms, and each tag on
   a card is clickable, running a search (`/search?q=<tag>`) for that tag in the
   feed, on the detail page, and within results alike.
+- The nav also has a "Random" action, open to everyone. Clicking it lands on a
+  random public, ready meme's detail page; repeated clicks vary; a private,
+  hidden, or not-yet-ready meme is never a possible result. If there are no
+  public memes yet, it shows a small inline message instead of navigating
+  (ADR 0013).
 
 ### Interaction
 

@@ -33,6 +33,13 @@ export default defineSchema({
     // backfill populates pre-existing rows; a missing value simply never
     // matches a search.
     searchText: v.optional(v.string()),
+    // Uniform-random tiebreaker (ADR 0013) backing the "Random" nav action
+    // (#66). Assigned once at insert (`Math.random()`) and never rewritten, so
+    // it has no relation to recency or any other field. Optional for the same
+    // reason `searchText` is: the field ships before the backfill populates
+    // pre-existing rows, and a missing value is treated as sorting first
+    // (reachable via `getRandomMeme`'s wraparound, not lost).
+    randomKey: v.optional(v.number()),
     visibility: visibilityValidator,
     status: v.union(
       v.literal("draft"),
@@ -54,6 +61,14 @@ export default defineSchema({
     downvoteCount: v.number(),
   })
     .index("by_visibility_and_status", ["visibility", "status"])
+    // Backs `getRandomMeme` (#66, ADR 0013): a random-key index seek instead of
+    // a full table scan. `randomKey` must be last so `.gte("randomKey", seed)`
+    // seeks within the public+ready partition in index order.
+    .index("by_visibility_and_status_and_randomKey", [
+      "visibility",
+      "status",
+      "randomKey",
+    ])
     .index("by_author", ["authorId"])
     .index("by_author_and_status", ["authorId", "status"])
     .index("by_author_and_visibility_and_status", [
