@@ -7,6 +7,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import {
   type QueryCtx,
   action,
+  internalAction,
   internalMutation,
   mutation,
   query,
@@ -198,7 +199,7 @@ export const getMeme = query({
 });
 
 /**
- * Random-discovery backing the nav "Random" action (#66, ADR 0013). Returns a
+ * Random-discovery backing the nav "Random" action (#66, ADR 0014). Returns a
  * random public, ready meme's id, or `null` if there are none.
  *
  * Strategy — random-key index seek, not a table scan: `seed` is a `[0, 1)`
@@ -500,7 +501,7 @@ export const insertProcessingMeme = internalMutation({
       title: args.title,
       // `args.tags` are already canonicalized by the caller (`createMeme`/seed).
       searchText: buildSearchText(args.title, args.tags),
-      // Assigned once, never rewritten (ADR 0013) — the random-key index seek
+      // Assigned once, never rewritten (ADR 0014) — the random-key index seek
       // behind `getRandomMeme` depends on this being a stable, uniform tag.
       randomKey: Math.random(),
       visibility: args.visibility,
@@ -631,46 +632,133 @@ export const moderateMeme = mutation({
 });
 
 /**
- * Owner-only delete of a meme. This is an **action** for the same reason
- * `createMeme` is: it commits a database change and then reclaims the R2 object,
- * and an action runs the object delete as its own committed step.
- *
- * Delete is a soft tombstone: the meme is flipped to `status = "deleted"` (which
- * hides it everywhere, already guarded by the public read filters) and its R2
- * bytes are reclaimed. Vote rows are left in place. Ordering matters — the
- * tombstone commits first, so a failed object delete leaves an orphaned object
- * (reclaimable later) rather than a still-visible meme. There is no restore UI;
- * a delayed-reclaim undo window is future work.
+ * Undo window between a soft-delete and its R2 reclaim (#71, ADR 0009). Owner
+ * memory of "I can still get this back" and the reclaim job's fire delay are
+ * the same number by construction — `deleteMeme` schedules the reclaim exactly
+ * this far out.
  */
-export const deleteMeme = action({
+const DELETE_UNDO_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Owner-only delete of a meme (#71, ADR 0009). Delete is a soft tombstone: the
+ * meme flips to `status = "deleted"` (hidden everywhere by the existing public
+ * read filters) and a `reclaimDeletedMeme` job is scheduled `DELETE_UNDO_WINDOW_MS`
+ * out to actually remove the R2 object. Vote rows are left in place, same as
+ * before.
+ *
+ * This is a plain **mutation**, not an action — unlike the original tombstone
+ * (which touched R2 synchronously and so had to be an action), this only
+ * writes the row and schedules a job, both of which are ordinary transactional
+ * work. The R2 side effect moved entirely into the scheduled job.
+ *
+ * The scheduled job's id is stored as `reclaimJobId`; its *presence* is what
+ * makes a meme restorable (`restoreMeme` requires and cancels it). A caller
+ * that restores within the window gets their meme back with the R2 object
+ * never touched.
+ */
+export const deleteMeme = mutation({
   args: { memeId: v.id("memes") },
   returns: v.null(),
-  handler: async (ctx, args): Promise<null> => {
-    // The tombstone (with its auth + ownership check) commits before we touch
-    // R2, so the meme is hidden even if the object delete later fails.
-    const mediaKey: string = await ctx.runMutation(
-      internal.memes.tombstoneMeme,
+  handler: async (ctx, args) => {
+    const viewerId = await getAuthUserId(ctx);
+    await requireOwnedMeme(ctx, args.memeId, viewerId);
+
+    const reclaimJobId = await ctx.scheduler.runAfter(
+      DELETE_UNDO_WINDOW_MS,
+      internal.memes.reclaimDeletedMeme,
       { memeId: args.memeId },
     );
-    await r2.deleteObject(ctx, mediaKey);
+    await ctx.db.patch(args.memeId, {
+      status: "deleted",
+      deletedAt: Date.now(),
+      reclaimJobId,
+    });
     return null;
   },
 });
 
 /**
- * Tombstone a meme and return its R2 key for reclamation. Internal-only. The
- * viewer is derived server-side from the auth context (which propagates through
- * `ctx.runMutation` from `deleteMeme`), never accepted as an argument. The
- * ownership gate lives here, inside the transaction, so the status flip and the
- * authorization check can't race.
+ * Owner-only restore of a soft-deleted meme, within its undo window (#71). A
+ * meme is restorable exactly when it's `deleted` *and* still carries a
+ * `reclaimJobId` — once the reclaim job has run (or the meme was never
+ * deleted), there's nothing left to restore.
+ *
+ * Deliberately doesn't reuse `requireOwnedMeme`: that helper treats a `deleted`
+ * meme as gone (correct for edit/re-delete), but restore's whole job is to act
+ * on a deleted meme. Ownership and "not found" still collapse to the same
+ * opaque error, matching the rest of the module.
  */
-export const tombstoneMeme = internalMutation({
+export const restoreMeme = mutation({
   args: { memeId: v.id("memes") },
-  returns: v.string(),
+  returns: v.null(),
   handler: async (ctx, args) => {
     const viewerId = await getAuthUserId(ctx);
-    const meme = await requireOwnedMeme(ctx, args.memeId, viewerId);
-    await ctx.db.patch(args.memeId, { status: "deleted" });
+    if (viewerId === null) {
+      throw new Error("You must be signed in to manage a meme.");
+    }
+    const meme = await ctx.db.get(args.memeId);
+    if (meme === null || meme.authorId !== viewerId) {
+      throw new Error("Meme not found.");
+    }
+    if (meme.status !== "deleted" || meme.reclaimJobId === undefined) {
+      throw new Error("This meme can no longer be restored.");
+    }
+
+    await ctx.scheduler.cancel(meme.reclaimJobId);
+    await ctx.db.patch(args.memeId, {
+      status: "ready",
+      deletedAt: undefined,
+      reclaimJobId: undefined,
+    });
+    return null;
+  },
+});
+
+/**
+ * Scheduled by `deleteMeme`, fires `DELETE_UNDO_WINDOW_MS` after a delete. An
+ * **action** for the same reason the old `deleteMeme` was: it must touch R2 as
+ * a separately-committed step. `finalizeReclaim` does the transactional part
+ * first (guard + clear `reclaimJobId`) and hands back the key to delete, so a
+ * restore that raced this job (or a re-run of an already-processed job) is a
+ * clean no-op rather than a double-delete.
+ */
+export const reclaimDeletedMeme = internalAction({
+  args: { memeId: v.id("memes") },
+  returns: v.null(),
+  handler: async (ctx, args): Promise<null> => {
+    const mediaKey: string | null = await ctx.runMutation(
+      internal.memes.finalizeReclaim,
+      { memeId: args.memeId },
+    );
+    if (mediaKey !== null) {
+      await r2.deleteObject(ctx, mediaKey);
+    }
+    return null;
+  },
+});
+
+/**
+ * Transactional half of `reclaimDeletedMeme`: confirm the meme is still
+ * pending reclaim (not restored, not already reclaimed by a prior run) and, if
+ * so, clear `reclaimJobId` *before* the caller touches R2 — matching the
+ * original tombstone's ordering, so a failed object delete leaves an orphaned
+ * object (reclaimable later) rather than a meme stuck in a re-triggerable
+ * state. Returns `null` to signal "nothing to reclaim", which the caller must
+ * treat as a no-op rather than an error.
+ */
+export const finalizeReclaim = internalMutation({
+  args: { memeId: v.id("memes") },
+  returns: v.union(v.string(), v.null()),
+  handler: async (ctx, args) => {
+    const meme = await ctx.db.get(args.memeId);
+    if (
+      meme === null ||
+      meme.status !== "deleted" ||
+      meme.reclaimJobId === undefined
+    ) {
+      return null;
+    }
+    await ctx.db.patch(args.memeId, { reclaimJobId: undefined });
     return meme.mediaKey;
   },
 });
@@ -722,7 +810,7 @@ export const backfillSearchText = internalMutation({
 });
 
 /**
- * One-time, idempotent backfill for `randomKey` (#66, ADR 0013). Memes written
+ * One-time, idempotent backfill for `randomKey` (#66, ADR 0014). Memes written
  * before the field shipped have no `randomKey` and are only reachable through
  * `getRandomMeme`'s wraparound branch until this runs; this assigns each such
  * row a fresh `Math.random()` value so the back catalog is uniformly seekable.

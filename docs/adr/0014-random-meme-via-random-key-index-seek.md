@@ -1,4 +1,4 @@
-# ADR 0013 - Random Meme Discovery via a Random-Key Index Seek
+# ADR 0014 - Random Meme Discovery via a Random-Key Index Seek
 
 Date: 2026-07-17
 Status: accepted

@@ -69,7 +69,7 @@ The product should let guests browse public content immediately, let authenticat
   random public, ready meme's detail page; repeated clicks vary; a private,
   hidden, or not-yet-ready meme is never a possible result. If there are no
   public memes yet, it shows a small inline message instead of navigating
-  (ADR 0013).
+  (ADR 0014).
 
 ### Interaction
 
@@ -82,7 +82,12 @@ The product should let guests browse public content immediately, let authenticat
 
 - Authenticated users can upload memes.
 - Authenticated users can edit metadata for their own memes.
-- Authenticated users can delete their own memes.
+- Authenticated users can delete their own memes. Delete asks for confirmation
+  through an in-app modal, never a browser `confirm()`.
+- A deleted meme is immediately hidden everywhere (feed, profile, search,
+  detail) but stays restorable for a fixed undo window (currently 24 hours)
+  before its media is permanently reclaimed. The owner can undo a delete from
+  the confirmation toast shown right after deleting.
 - Users can edit their profile display name from the settings page; other
   profile fields (email, avatar) stay managed by the auth provider.
 
