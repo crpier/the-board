@@ -24,7 +24,11 @@ export default defineSchema({
     isAdmin: v.optional(v.boolean()),
   })
     .index("email", ["email"])
-    .index("phone", ["phone"]),
+    .index("phone", ["phone"])
+    // Backs the admin roster (`users.listUsers`, #68) and the last-admin
+    // guard in `demoteUser`, which needs a cheap "how many admins are there"
+    // check without a table scan.
+    .index("by_isAdmin", ["isAdmin"]),
   memes: defineTable({
     title: v.optional(v.string()),
     // Denormalized full-text search blob: title + canonicalized tags joined by

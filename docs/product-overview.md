@@ -20,7 +20,8 @@ The product should let guests browse public content immediately, let authenticat
 
 - Guest: browses public memes and public meme detail pages.
 - User: browses, votes, uploads, and manages their own memes.
-- Admin: moderates content and reviews system findings without needing a separate admin product surface.
+- Admin: moderates content and reviews system findings mostly through the
+  normal UI, plus manages who else holds the admin role via `/admin/users`.
 
 ## Core experience
 
@@ -160,6 +161,11 @@ The product should let guests browse public content immediately, let authenticat
 - Users can interact with their own content and participate through voting.
 - The first registered user becomes admin automatically.
 - Admins can moderate any meme through visibility changes and review system findings in the normal UI.
+- Admins can promote any user to admin, and demote an admin back to a regular
+  user, from the user role management surface (`/admin/users`).
+- The last remaining admin can't be demoted — enforced server-side, not just
+  hidden in the UI — so the product can never end up with zero admins able to
+  grant admin to anyone else.
 
 ## Design principles
 
@@ -171,7 +177,9 @@ The product should let guests browse public content immediately, let authenticat
 ## Non-goals
 
 - No `special` tier.
-- No separate admin console as a primary product surface.
+- No unified admin dashboard as a primary product surface — admin
+  capabilities live in small, purpose-specific routes (e.g. `/admin/users`
+  for role management) rather than one general-purpose admin console.
 - No comments, reposts, bookmarks, or social-graph features as core requirements.
 - No managed video streaming service as part of the core product.
 - No groups or community segmentation requirements.
