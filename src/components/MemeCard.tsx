@@ -108,7 +108,7 @@ export function MemeCard(props: {
         </Show>
 
         {/* Actions + meta row */}
-        <div class="flex items-center gap-3">
+        <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
           <VoteControl
             memeId={props.meme._id}
             initialUpvoteCount={props.meme.upvoteCount}
@@ -132,8 +132,10 @@ export function MemeCard(props: {
             <ModerationControls meme={props.meme} />
           </Show>
 
-          {/* Author profile + time permalink — pushed to the right */}
-          <span class="ml-auto text-[11px] text-[#6a6a7e]">
+          {/* Author profile + time permalink — pushed to the right when the row
+              fits on one line, wraps onto its own line (and breaks long
+              usernames) otherwise so it can never force horizontal scroll */}
+          <span class="ml-auto max-w-full text-[11px] break-words text-[#6a6a7e]">
             <A
               href={props.meme.authorProfileHref}
               class="transition-colors hover:text-[#63e6be]"

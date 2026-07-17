@@ -12,11 +12,11 @@ export default function Navbar() {
   }));
 
   return (
-    <nav class="flex items-center justify-between p-4">
+    <nav class="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 p-3 sm:p-4">
       <a href="/" class="font-bold tracking-tight">
         the-board
       </a>
-      <div class="flex items-center gap-3">
+      <div class="flex min-w-0 flex-wrap items-center justify-end gap-x-3 gap-y-2">
         {/* Plain link to the search page — not an inline live search box.
             Search is open to everyone, so it sits outside the auth gate. */}
         <A href="/search" class="text-sm text-[#5a5a6e] hover:text-[#63e6be]">
@@ -44,13 +44,13 @@ export default function Navbar() {
                 // settings — no separate nav item needed.
                 <A
                   href="/settings"
-                  class="flex items-center gap-2 transition-colors hover:text-[#63e6be]"
+                  class="flex min-w-0 items-center gap-2 transition-colors hover:text-[#63e6be]"
                   title="Settings"
                 >
                   <Show
                     when={user().avatarUrl}
                     fallback={
-                      <div class="flex h-8 w-8 items-center justify-center rounded-full bg-[#2a2a3e] text-sm uppercase">
+                      <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#2a2a3e] text-sm uppercase">
                         {user().displayName.charAt(0)}
                       </div>
                     }
@@ -59,11 +59,13 @@ export default function Navbar() {
                       <img
                         src={avatarUrl()}
                         alt=""
-                        class="h-8 w-8 rounded-full"
+                        class="h-8 w-8 shrink-0 rounded-full"
                       />
                     )}
                   </Show>
-                  <span class="text-sm">{user().displayName}</span>
+                  <span class="max-w-[8rem] truncate text-sm sm:max-w-[12rem]">
+                    {user().displayName}
+                  </span>
                 </A>
               )}
             </Show>

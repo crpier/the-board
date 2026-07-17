@@ -95,8 +95,11 @@ export function VoteControl(props: {
   const enabled = () => auth.isAuthenticated();
 
   const buttonClass = (active: boolean, activeColor: string) => {
+    // min-h-11 (44px) meets the Apple HIG / Android tap-target minimum
+    // regardless of icon/text metrics — the row-level padding alone was a
+    // couple px short of that at the default text-sm line-height.
     const base =
-      "flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-bold transition";
+      "flex min-h-11 items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-bold transition";
     const disabled = enabled()
       ? "cursor-pointer"
       : "cursor-not-allowed opacity-50";
