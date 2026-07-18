@@ -10,6 +10,7 @@
 
 import type * as auth from "../auth.js";
 import type * as authz from "../authz.js";
+import type * as crons from "../crons.js";
 import type * as http from "../http.js";
 import type * as media from "../media.js";
 import type * as memes from "../memes.js";
@@ -19,6 +20,7 @@ import type * as rateLimiter from "../rateLimiter.js";
 import type * as reports from "../reports.js";
 import type * as seed from "../seed.js";
 import type * as seedAssets from "../seedAssets.js";
+import type * as storageSweep from "../storageSweep.js";
 import type * as users from "../users.js";
 import type * as validators from "../validators.js";
 import type * as viewer from "../viewer.js";
@@ -33,6 +35,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   authz: typeof authz;
+  crons: typeof crons;
   http: typeof http;
   media: typeof media;
   memes: typeof memes;
@@ -42,6 +45,7 @@ declare const fullApi: ApiFromModules<{
   reports: typeof reports;
   seed: typeof seed;
   seedAssets: typeof seedAssets;
+  storageSweep: typeof storageSweep;
   users: typeof users;
   validators: typeof validators;
   viewer: typeof viewer;

@@ -88,6 +88,9 @@ export default defineSchema({
       "status",
       "randomKey",
     ])
+    // Backs the orphan sweep (`storageSweep.sweepOrphanedR2Objects`, #81):
+    // given an R2 object key, find the (at most one) meme row that claims it.
+    .index("by_mediaKey", ["mediaKey"])
     .index("by_author", ["authorId"])
     .index("by_author_and_status", ["authorId", "status"])
     .index("by_author_and_visibility_and_status", [

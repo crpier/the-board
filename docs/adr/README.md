@@ -20,3 +20,4 @@ One file per decision. Numbered sequentially; supersede rather than rewrite past
 - [0016 - Admin Role Management via a Dedicated `/admin/users` Route](0016-admin-role-management-route.md)
 - [0017 - Per-User Rate Limiting via the Convex Rate Limiter Component](0017-rate-limiting.md)
 - [0018 - User Reporting and an Admin Review Queue at `/admin`](0018-user-reporting-and-admin-review-queue.md)
+- [0019 - Orphaned R2 Object Sweep](0019-orphaned-r2-object-sweep.md)

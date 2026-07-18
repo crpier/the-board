@@ -695,7 +695,7 @@ export const moderateMeme = mutation({
  * the same number by construction — `deleteMeme` schedules the reclaim exactly
  * this far out.
  */
-const DELETE_UNDO_WINDOW_MS = 24 * 60 * 60 * 1000;
+export const DELETE_UNDO_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Owner-only delete of a meme (#71, ADR 0009). Delete is a soft tombstone: the
