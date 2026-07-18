@@ -117,6 +117,11 @@ The product should let guests browse public content immediately, let authenticat
   detail) but stays restorable for a fixed undo window (currently 24 hours)
   before its media is permanently reclaimed. The owner can undo a delete from
   the confirmation toast shown right after deleting.
+- Media storage cleanup is eventually consistent: a background sweep runs
+  every few hours and removes any stored media object that no longer belongs
+  to a live meme (including one reclaimed past its undo window), catching
+  cases where the normal reclaim step failed to finish. This is invisible to
+  users and does not change when a deleted meme's undo window closes.
 - Users can edit their profile display name from the settings page; other
   profile fields (email, avatar) stay managed by the auth provider.
 
