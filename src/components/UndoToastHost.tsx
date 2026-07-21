@@ -15,23 +15,38 @@ import { dismissUndoToast, undoToast } from "~/lib/undo-toast";
  */
 export function UndoToastHost() {
   const restoreMeme = useMutation(api.memes.restoreMeme);
+  const restoreTemplate = useMutation(api.templates.restoreTemplate);
   const [error, setError] = createSignal<string | null>(null);
 
-  // A new toast (different meme) should start without a stale error from the
+  const isRestoring = () =>
+    restoreMeme.isLoading() || restoreTemplate.isLoading();
+
+  // A new toast (different target) should start without a stale error from the
   // previous one.
   createEffect(
     on(
-      () => undoToast()?.memeId,
+      () => {
+        const t = undoToast();
+        return t?.kind === "meme"
+          ? t.memeId
+          : t?.kind === "template"
+            ? t.templateId
+            : undefined;
+      },
       () => setError(null),
     ),
   );
 
   async function onUndo() {
     const current = undoToast();
-    if (!current || restoreMeme.isLoading()) return;
+    if (!current || isRestoring()) return;
     setError(null);
     try {
-      await restoreMeme.mutate({ memeId: current.memeId });
+      if (current.kind === "meme") {
+        await restoreMeme.mutate({ memeId: current.memeId });
+      } else {
+        await restoreTemplate.mutate({ templateId: current.templateId });
+      }
       dismissUndoToast();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Restore failed.");
@@ -49,11 +64,11 @@ export function UndoToastHost() {
             <p class="text-sm text-[#c7c7d6]">{error() ?? entry().message}</p>
             <button
               type="button"
-              disabled={restoreMeme.isLoading()}
+              disabled={isRestoring()}
               onClick={() => void onUndo()}
               class="text-sm font-bold text-[#63e6be] transition hover:text-[#63e6be]/80 disabled:opacity-50"
             >
-              {restoreMeme.isLoading() ? "Restoring…" : "Undo"}
+              {isRestoring() ? "Restoring…" : "Undo"}
             </button>
             <button
               type="button"

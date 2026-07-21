@@ -78,6 +78,14 @@ export default function Navbar() {
               <button onClick={() => void auth.signIn()}>Sign in</button>
             }
           >
+            {/* Meme Creator (#84) — a create-in-app entry point alongside the
+                raw upload path. */}
+            <A
+              href="/create"
+              class="text-sm text-[#5a5a6e] hover:text-[#63e6be]"
+            >
+              Create
+            </A>
             <a
               href="/upload"
               class="rounded-xl border border-[#63e6be]/30 bg-[#63e6be]/10 px-3 py-1.5 text-sm font-bold text-[#63e6be]"

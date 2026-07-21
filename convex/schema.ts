@@ -105,6 +105,53 @@ export default defineSchema({
       searchField: "searchText",
       filterFields: ["visibility", "status", "mediaType"],
     }),
+  // Reusable base images for the Meme Creator (#84, ADR 0020). A template is a
+  // deliberately thin cousin of a meme: it has no votes, no visibility (always
+  // public), and no feed presence, but reuses the meme media/lifecycle
+  // mechanics wholesale — presigned-R2-PUT upload, owner soft-delete + undo +
+  // delayed R2 reclaim, admin removal, and reporting. The composed meme that a
+  // template helps produce is a plain uploaded meme with no link back here
+  // (backend-blind creator, ADR 0020), so there is no foreign key from `memes`
+  // to `templates` and no usage tracking.
+  templates: defineTable({
+    // Required short human name, shown in the picker and searched on. Trimmed
+    // and length-capped server-side in `createTemplate`.
+    name: v.string(),
+    // Denormalized lowercase name backing `search_name`, mirroring `memes`'
+    // `searchText`. Optional so the field can ship before a backfill; a missing
+    // value simply never matches a search.
+    searchText: v.optional(v.string()),
+    // R2 object key for the base image, resolved to a CDN URL at read time
+    // exactly like `memes.mediaKey` (ADR 0005). Raw keys never leave a query.
+    mediaKey: v.string(),
+    // Always `"image"` in v1 (static images only — GIF/video are rejected), but
+    // typed with the shared validator so the media rules stay identical to
+    // memes and a future relaxation is a one-line change.
+    mediaType: mediaTypeValidator,
+    // Templates skip the meme `processing`/`ready` dance — they are inserted
+    // ready — but reuse the `deleted` tombstone so soft-delete + undo + reclaim
+    // work identically (ADR 0009/0013).
+    status: v.union(v.literal("ready"), v.literal("deleted")),
+    authorId: v.id("users"),
+    // Soft-delete tombstone + undo-window plumbing, identical semantics to
+    // `memes` (ADR 0013): set together by a delete, cleared together by a
+    // restore, and `reclaimJobId`'s presence *is* the undo window.
+    deletedAt: v.optional(v.number()),
+    reclaimJobId: v.optional(v.id("_scheduled_functions")),
+  })
+    // Backs the newest-first picker grid: ready templates, `_creationTime`
+    // descending via the index's built-in trailing key.
+    .index("by_status", ["status"])
+    .index("by_author", ["authorId"])
+    // Orphan-sweep parity with `memes.by_mediaKey` (#81): given an R2 key, find
+    // the template that claims it.
+    .index("by_mediaKey", ["mediaKey"])
+    // Name search for the picker (ADR 0010-style single relevance index).
+    // `status` is the one filter so deleted templates never surface.
+    .searchIndex("search_name", {
+      searchField: "searchText",
+      filterFields: ["status"],
+    }),
   votes: defineTable({
     userId: v.id("users"),
     memeId: v.id("memes"),
@@ -118,7 +165,15 @@ export default defineSchema({
   // fact `_creationTime` can't: *who* resolved it).
   reports: defineTable({
     reporterId: v.id("users"),
-    memeId: v.id("memes"),
+    // A report targets exactly one entity, discriminated by which foreign key
+    // is present: `memeId` for a meme report, `templateId` for a template
+    // report (#84, ADR 0020). Both are optional rather than a discriminated
+    // union so the extension is migration-free — existing meme reports (which
+    // carry `memeId` and no `templateId`) validate unchanged, and no
+    // `targetType` field has to be backfilled. Callers set exactly one; the
+    // read models switch on presence.
+    memeId: v.optional(v.id("memes")),
+    templateId: v.optional(v.id("templates")),
     reason: reportReasonValidator,
     details: v.optional(v.string()),
     status: reportStatusValidator,
@@ -131,6 +186,12 @@ export default defineSchema({
     // already have an open report on this meme?
     .index("by_meme_and_reporter_and_status", [
       "memeId",
+      "reporterId",
+      "status",
+    ])
+    // Same duplicate-report guard for template reports (#84).
+    .index("by_template_and_reporter_and_status", [
+      "templateId",
       "reporterId",
       "status",
     ]),

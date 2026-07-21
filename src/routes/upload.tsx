@@ -1,26 +1,18 @@
-import { api } from "@convex/_generated/api";
 import { ACCEPTED_FILE_TYPES } from "@convex/media";
 import { Title } from "@solidjs/meta";
 import { Show, createSignal, onCleanup } from "solid-js";
+import { MetadataForm } from "~/components/MetadataForm";
 import { useConvexAuth } from "~/lib/convex-auth-solid";
-import { useAction, useMutation } from "~/lib/convex-solid";
+import { useConvexClient } from "~/lib/convex-solid";
 import { friendlyErrorMessage } from "~/lib/errors";
-import { type FileCheck, putToR2, validateFile } from "~/lib/upload";
+import {
+  type FileCheck,
+  type MemeMetadata,
+  publishMeme,
+  validateFile,
+} from "~/lib/upload";
 
-type Visibility = "public" | "private";
 type Phase = "idle" | "uploading" | "posted";
-
-/**
- * Split a free-text tag field into raw tags. We only do the cheap structural
- * split here (commas) and leave canonicalization — trim, lowercase, de-dupe — to
- * the server (`canonicalizeTags`), so the client never has to mirror those rules.
- */
-function parseTags(text: string): string[] {
-  return text
-    .split(",")
-    .map((t) => t.trim())
-    .filter((t) => t.length > 0);
-}
 
 export default function Upload() {
   const auth = useConvexAuth()!;
@@ -55,17 +47,11 @@ export default function Upload() {
 }
 
 function UploadForm() {
-  const generateUploadUrl = useMutation(api.r2.generateUploadUrl);
-  const syncUploadedMetadata = useAction(api.r2.syncUploadedMetadata);
-  const createMeme = useAction(api.memes.createMeme);
+  const client = useConvexClient();
 
   const [file, setFile] = createSignal<File | null>(null);
   const [check, setCheck] = createSignal<FileCheck | null>(null);
   const [previewUrl, setPreviewUrl] = createSignal<string | null>(null);
-
-  const [title, setTitle] = createSignal("");
-  const [tagsText, setTagsText] = createSignal("");
-  const [visibility, setVisibility] = createSignal<Visibility>("public");
 
   const [phase, setPhase] = createSignal<Phase>("idle");
   const [progress, setProgress] = createSignal(0);
@@ -94,11 +80,7 @@ function UploadForm() {
     setPreview(result.ok ? URL.createObjectURL(picked) : null);
   }
 
-  const canSubmit = () =>
-    phase() === "idle" && file() !== null && check()?.ok === true;
-
-  // Narrowed views of the union so JSX doesn't have to re-narrow `check()` (each
-  // call returns the union afresh, defeating control-flow narrowing).
+  // Narrowed views of the union so JSX doesn't have to re-narrow `check()`.
   const mediaType = () => {
     const c = check();
     return c?.ok ? c.mediaType : null;
@@ -108,8 +90,7 @@ function UploadForm() {
     return c && !c.ok ? c.error : null;
   };
 
-  async function onSubmit(event: SubmitEvent) {
-    event.preventDefault();
+  async function onPublish(meta: MemeMetadata) {
     const picked = file();
     if (!picked || check()?.ok !== true) return;
 
@@ -117,32 +98,13 @@ function UploadForm() {
     setProgress(0);
     setError(null);
     try {
-      const { url, key } = await generateUploadUrl.mutate({});
-      await putToR2(url, picked, setProgress);
-      await syncUploadedMetadata.mutate({ key });
-      await createMeme.mutate({
-        key,
-        title: title().trim() || undefined,
-        tags: parseTags(tagsText()),
-        visibility: visibility(),
-      });
+      if (!client) throw new Error("Not connected.");
+      await publishMeme(client, picked, meta, setProgress);
       setPhase("posted");
     } catch (err) {
       setError(friendlyErrorMessage(err, "Upload failed."));
       setPhase("idle");
     }
-  }
-
-  function reset() {
-    setPreview(null);
-    setFile(null);
-    setCheck(null);
-    setTitle("");
-    setTagsText("");
-    setVisibility("public");
-    setProgress(0);
-    setError(null);
-    setPhase("idle");
   }
 
   return (
@@ -161,18 +123,11 @@ function UploadForm() {
             >
               View feed
             </a>
-            <button
-              type="button"
-              class="rounded-xl border border-[#63e6be]/30 bg-[#63e6be]/10 px-4 py-2 text-sm font-bold text-[#63e6be]"
-              onClick={reset}
-            >
-              Upload another
-            </button>
           </div>
         </div>
       }
     >
-      <form class="space-y-5" onSubmit={onSubmit}>
+      <div class="space-y-5">
         {/* File picker + preview */}
         <div>
           <label
@@ -206,14 +161,12 @@ function UploadForm() {
             onChange={(e) => onPick(e.currentTarget.files?.[0])}
           />
 
-          {/* Inline validation error from the client gate */}
           <Show when={checkError()}>
             {(message) => (
               <p class="mt-2 text-sm text-[#ff8787]">{message()}</p>
             )}
           </Show>
 
-          {/* Preview of a valid pick */}
           <Show when={mediaType() && previewUrl()}>
             {(src) => (
               <div class="mt-3 overflow-hidden rounded-xl border border-white/10">
@@ -234,90 +187,15 @@ function UploadForm() {
           </Show>
         </div>
 
-        {/* Title */}
-        <div>
-          <label for="meme-title" class="mb-1 block text-sm text-[#5a5a6e]">
-            Title <span class="text-[#5a5a6e]/60">(optional)</span>
-          </label>
-          <input
-            id="meme-title"
-            type="text"
-            value={title()}
-            disabled={phase() === "uploading"}
-            onInput={(e) => setTitle(e.currentTarget.value)}
-            class="w-full rounded-xl border border-white/10 bg-transparent px-3 py-2 text-sm outline-none focus:border-[#63e6be]/40"
-          />
-        </div>
-
-        {/* Tags */}
-        <div>
-          <label for="meme-tags" class="mb-1 block text-sm text-[#5a5a6e]">
-            Tags <span class="text-[#5a5a6e]/60">(comma-separated)</span>
-          </label>
-          <input
-            id="meme-tags"
-            type="text"
-            value={tagsText()}
-            disabled={phase() === "uploading"}
-            placeholder="cats, reaction, monday"
-            onInput={(e) => setTagsText(e.currentTarget.value)}
-            class="w-full rounded-xl border border-white/10 bg-transparent px-3 py-2 text-sm outline-none placeholder:text-[#5a5a6e]/50 focus:border-[#63e6be]/40"
-          />
-        </div>
-
-        {/* Visibility toggle */}
-        <div>
-          <span class="mb-1 block text-sm text-[#5a5a6e]">Visibility</span>
-          <div
-            class="inline-flex rounded-xl border border-white/10 p-1"
-            role="group"
-            aria-label="Visibility"
-          >
-            <button
-              type="button"
-              aria-pressed={visibility() === "public"}
-              disabled={phase() === "uploading"}
-              onClick={() => setVisibility("public")}
-              class={`rounded-lg px-4 py-1.5 text-sm font-bold transition ${
-                visibility() === "public"
-                  ? "bg-[#63e6be]/10 text-[#63e6be]"
-                  : "text-[#5a5a6e]"
-              }`}
-            >
-              Public
-            </button>
-            <button
-              type="button"
-              aria-pressed={visibility() === "private"}
-              disabled={phase() === "uploading"}
-              onClick={() => setVisibility("private")}
-              class={`rounded-lg px-4 py-1.5 text-sm font-bold transition ${
-                visibility() === "private"
-                  ? "bg-[#63e6be]/10 text-[#63e6be]"
-                  : "text-[#5a5a6e]"
-              }`}
-            >
-              Private
-            </button>
-          </div>
-        </div>
-
-        {/* Server / network error */}
-        <Show when={error()}>
-          <p class="text-sm text-[#ff8787]">{error()}</p>
-        </Show>
-
-        {/* Submit + progress */}
-        <button
-          type="submit"
-          disabled={!canSubmit()}
-          class="w-full rounded-xl border border-[#63e6be]/30 bg-[#63e6be]/10 px-4 py-2.5 text-sm font-bold text-[#63e6be] transition disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <Show when={phase() === "uploading"} fallback={<span>Publish</span>}>
-            Uploading… {Math.round(progress() * 100)}%
-          </Show>
-        </button>
-      </form>
+        <MetadataForm
+          submitLabel="Publish"
+          busy={phase() === "uploading"}
+          busyLabel={`Uploading… ${Math.round(progress() * 100)}%`}
+          disabled={file() === null || check()?.ok !== true}
+          error={error()}
+          onPublish={(meta) => void onPublish(meta)}
+        />
+      </div>
     </Show>
   );
 }

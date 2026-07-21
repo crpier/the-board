@@ -93,6 +93,34 @@ function getMeme(t: ReturnType<typeof convexTest>, memeId: Id<"memes">) {
   return t.run(async (ctx) => ctx.db.get(memeId));
 }
 
+async function seedTemplate(
+  t: ReturnType<typeof convexTest>,
+  overrides: Record<string, unknown> = {},
+) {
+  const userId = await t.run(async (ctx) => {
+    return await ctx.db.insert("users", { name: "Tester" });
+  });
+  const templateId = await t.run(async (ctx) => {
+    return await ctx.db.insert("templates", {
+      name: "Base",
+      searchText: "base",
+      status: "ready",
+      mediaKey: "templates/abc.png",
+      mediaType: "image",
+      authorId: userId,
+      ...overrides,
+    });
+  });
+  return { userId, templateId };
+}
+
+function getTemplate(
+  t: ReturnType<typeof convexTest>,
+  templateId: Id<"templates">,
+) {
+  return t.run(async (ctx) => ctx.db.get(templateId));
+}
+
 describe("sweepOrphanedR2Objects", () => {
   test("deletes an object with no meme row, once past the grace period", async () => {
     const t = setup();
@@ -138,6 +166,46 @@ describe("sweepOrphanedR2Objects", () => {
 
     expect(result.deleted).toBe(0);
     expect(await objectExists(t, key)).toBe(true);
+  });
+
+  test("keeps an object referenced by a live template", async () => {
+    // Templates share the bucket with memes but aren't claimed by any meme
+    // row, so without the template-claim check the sweep would delete this
+    // live base image as an orphan (#84).
+    const t = setup();
+    const key = "templates/live.png";
+    await seedTemplate(t, { mediaKey: key, status: "ready" });
+    await seedObject(t, key, new Date(Date.now() - 2 * 60 * 60 * 1000));
+
+    const result = await t.action(
+      internal.storageSweep.sweepOrphanedR2Objects,
+      {},
+    );
+
+    expect(result.deleted).toBe(0);
+    expect(await objectExists(t, key)).toBe(true);
+  });
+
+  test("deletes a deleted template's object stranded with no reclaimJobId", async () => {
+    const t = setup();
+    const key = "templates/stranded.png";
+    const { templateId } = await seedTemplate(t, {
+      mediaKey: key,
+      status: "deleted",
+      deletedAt: Date.now(),
+      // No reclaimJobId: finalizeTemplateReclaim already cleared it, but the
+      // object delete that should have followed never happened.
+    });
+    await seedObject(t, key, new Date(Date.now() - 2 * 60 * 60 * 1000));
+
+    const result = await t.action(
+      internal.storageSweep.sweepOrphanedR2Objects,
+      {},
+    );
+
+    expect(result.deleted).toBe(1);
+    expect(await objectExists(t, key)).toBe(false);
+    expect((await getTemplate(t, templateId))?.status).toBe("deleted");
   });
 
   test("deletes an object left behind when finalizeReclaim committed but deleteObject previously failed", async () => {
