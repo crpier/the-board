@@ -378,8 +378,10 @@ describe("listOpenReports", () => {
       paginationOpts: { numItems: 10, cursor: null },
     });
     expect(result.page).toHaveLength(1);
-    expect(result.page[0].memeAvailable).toBe(false);
-    expect(result.page[0].memeMediaUrl).toBeUndefined();
+    const item = result.page[0];
+    if (item.targetType !== "meme") throw new Error("expected a meme report");
+    expect(item.memeAvailable).toBe(false);
+    expect(item.memeMediaUrl).toBeUndefined();
   });
 });
 

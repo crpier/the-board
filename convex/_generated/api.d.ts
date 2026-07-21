@@ -21,6 +21,7 @@ import type * as reports from "../reports.js";
 import type * as seed from "../seed.js";
 import type * as seedAssets from "../seedAssets.js";
 import type * as storageSweep from "../storageSweep.js";
+import type * as templates from "../templates.js";
 import type * as users from "../users.js";
 import type * as validators from "../validators.js";
 import type * as viewer from "../viewer.js";
@@ -46,6 +47,7 @@ declare const fullApi: ApiFromModules<{
   seed: typeof seed;
   seedAssets: typeof seedAssets;
   storageSweep: typeof storageSweep;
+  templates: typeof templates;
   users: typeof users;
   validators: typeof validators;
   viewer: typeof viewer;
