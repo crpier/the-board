@@ -39,6 +39,20 @@ import {
 const EXPORT_MIME = "image/jpeg";
 const EXPORT_QUALITY = 0.9;
 
+// A template base is an R2 CDN image loaded with `crossOrigin="anonymous"`. If
+// the CDN doesn't return `Access-Control-Allow-Origin`, the browser fails the
+// image load outright (with `crossorigin` set, a missing ACAO is a load error,
+// not just a taint) — and even if it loaded, reading it back off the canvas
+// throws a `SecurityError`. Both mean the same deployment gap, so we surface a
+// CORS-specific hint instead of the generic failure message.
+const CDN_CORS_HINT =
+  "Couldn't load the template image for export. The media CDN must send CORS headers (Access-Control-Allow-Origin) for template-based memes to work.";
+
+/** A tainted-canvas read (`toBlob`/`toDataURL`) rejects with a `SecurityError`. */
+function isCanvasCorsError(err: unknown): boolean {
+  return err instanceof DOMException && err.name === "SecurityError";
+}
+
 type Base =
   | { source: "local"; file: File; url: string; name: string }
   | { source: "template"; url: string; name: string };
@@ -86,6 +100,9 @@ function Creator() {
   const [boxes, setBoxes] = createSignal<TextBox[]>([]);
   const [selectedId, setSelectedId] = createSignal<string | null>(null);
   const [pickError, setPickError] = createSignal<string | null>(null);
+  // Set when the base image itself fails to load — the common template case is
+  // a CDN without CORS headers (see `CDN_CORS_HINT`).
+  const [baseError, setBaseError] = createSignal<string | null>(null);
   const [fontReady, setFontReady] = createSignal(false);
 
   // Natural image dimensions, set on load; drive the natural-px coordinate space.
@@ -147,7 +164,19 @@ function Creator() {
   }
 
   function onImageLoad() {
+    setBaseError(null);
     if (imgEl) setNatural({ w: imgEl.naturalWidth, h: imgEl.naturalHeight });
+  }
+
+  function onImageError() {
+    setNatural(null);
+    // A local blob URL effectively never fails to load; a template base is a
+    // cross-origin CDN URL, so a load failure here is the CORS gap.
+    setBaseError(
+      base()?.source === "template"
+        ? CDN_CORS_HINT
+        : "Couldn't load that image. Try another one.",
+    );
   }
 
   // Screen px per natural px, for mapping pointer deltas into image space.
@@ -289,7 +318,12 @@ function Creator() {
       void navigator.clipboard
         .write([new ClipboardItem({ "image/png": blobPromise })])
         .then(() => setCopyState("copied"))
-        .catch(() => setCopyState("error"));
+        .catch((err) => {
+          // Surface the CORS gap for a template base rather than a bare "Copy
+          // failed" — the banner explains what to fix.
+          if (isCanvasCorsError(err)) setBaseError(CDN_CORS_HINT);
+          setCopyState("error");
+        });
     } catch {
       setCopyState("error");
     }
@@ -317,7 +351,7 @@ function Creator() {
     setMemeOutcome(null);
     setTemplateOutcome(null);
 
-    // Meme half — always runs.
+    // Meme half — always runs, and is never blocked by the template fields.
     try {
       await ensureMemeFontReady();
       const canvas = renderToCanvas();
@@ -327,23 +361,33 @@ function Creator() {
       await publishMeme(client, file, meta);
       setMemeOutcome("ok");
     } catch (err) {
-      setMemeOutcome(friendlyErrorMessage(err, "Publishing the meme failed."));
+      setMemeOutcome(
+        isCanvasCorsError(err)
+          ? CDN_CORS_HINT
+          : friendlyErrorMessage(err, "Publishing the meme failed."),
+      );
     }
 
-    // Template half — independent outcome, only for local-file bases.
+    // Template half — independent outcome, only for local-file bases. A blank
+    // name fails just this half (never the meme publish above), matching the
+    // spec's per-half outcomes (#84).
     const b = base();
     if (saveAsTemplate() && b?.source === "local") {
-      try {
-        const key = await uploadFileToR2(client, b.file);
-        await client.action(api.templates.createTemplate, {
-          key,
-          name: templateName().trim(),
-        });
-        setTemplateOutcome("ok");
-      } catch (err) {
+      const name = templateName().trim();
+      if (name.length === 0) {
         setTemplateOutcome(
-          friendlyErrorMessage(err, "Saving the template failed."),
+          "Add a template name to save it, or untick “save as template”.",
         );
+      } else {
+        try {
+          const key = await uploadFileToR2(client, b.file);
+          await client.action(api.templates.createTemplate, { key, name });
+          setTemplateOutcome("ok");
+        } catch (err) {
+          setTemplateOutcome(
+            friendlyErrorMessage(err, "Saving the template failed."),
+          );
+        }
       }
     }
 
@@ -375,6 +419,13 @@ function Creator() {
             template={
               saveAsTemplate() && canSaveTemplate() ? templateOutcome() : null
             }
+            onRetry={() => {
+              // Back to the editor with the base and boxes intact so a failed
+              // publish can simply be tried again.
+              setMemeOutcome(null);
+              setTemplateOutcome(null);
+              setShowPublish(false);
+            }}
           />
         </Match>
 
@@ -387,6 +438,7 @@ function Creator() {
                 src={base()!.url}
                 alt=""
                 onLoad={onImageLoad}
+                onError={onImageError}
                 class="block w-full"
                 crossOrigin="anonymous"
                 draggable={false}
@@ -406,6 +458,12 @@ function Creator() {
                 )}
               </For>
             </div>
+
+            <Show when={baseError()}>
+              <p class="rounded-lg border border-[#ff8787]/30 bg-[#ff8787]/10 px-3 py-2 text-sm text-[#ff8787]">
+                {baseError()}
+              </p>
+            </Show>
 
             <Show
               when={fontReady()}
@@ -492,7 +550,6 @@ function Creator() {
                 <MetadataForm
                   submitLabel="Publish to the board"
                   busy={publishing()}
-                  disabled={templateNameMissing()}
                   onPublish={(meta) => void onPublish(meta)}
                 >
                   <Show when={canSaveTemplate()}>
@@ -519,6 +576,15 @@ function Creator() {
                           }
                           class="w-full rounded-lg border border-white/10 bg-transparent px-2 py-1 text-sm outline-none focus:border-[#63e6be]/40"
                         />
+                        {/* Inline, template-half-only validation: it never
+                            blocks the meme publish, only warns the template
+                            won't be saved without a name (#84). */}
+                        <Show when={templateNameMissing()}>
+                          <p class="text-xs text-[#ff8787]">
+                            Add a name to save this as a template — the meme
+                            still publishes either way.
+                          </p>
+                        </Show>
                       </Show>
                     </div>
                   </Show>
@@ -624,7 +690,10 @@ function OverlayBox(props: {
 function PublishOutcome(props: {
   meme: "ok" | string | null;
   template: "ok" | string | null;
+  onRetry: () => void;
 }) {
+  const hasFailure = () =>
+    props.meme !== "ok" || (props.template !== null && props.template !== "ok");
   return (
     <div class="space-y-3 rounded-2xl border border-white/10 p-6">
       <div>
@@ -647,12 +716,23 @@ function PublishOutcome(props: {
           </Show>
         </div>
       </Show>
-      <a
-        href="/"
-        class="inline-block rounded-xl border border-white/10 px-4 py-2 text-sm font-bold"
-      >
-        View feed
-      </a>
+      <div class="flex flex-wrap gap-2">
+        <Show when={hasFailure()}>
+          <button
+            type="button"
+            onClick={() => props.onRetry()}
+            class="rounded-xl border border-[#63e6be]/30 bg-[#63e6be]/10 px-4 py-2 text-sm font-bold text-[#63e6be]"
+          >
+            Back to editor
+          </button>
+        </Show>
+        <a
+          href="/"
+          class="inline-block rounded-xl border border-white/10 px-4 py-2 text-sm font-bold"
+        >
+          View feed
+        </a>
+      </div>
     </div>
   );
 }
