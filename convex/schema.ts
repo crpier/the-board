@@ -105,13 +105,13 @@ export default defineSchema({
       searchField: "searchText",
       filterFields: ["visibility", "status", "mediaType"],
     }),
-  // Reusable base images for the Meme Creator (#84, ADR 0019). A template is a
+  // Reusable base images for the Meme Creator (#84, ADR 0020). A template is a
   // deliberately thin cousin of a meme: it has no votes, no visibility (always
   // public), and no feed presence, but reuses the meme media/lifecycle
   // mechanics wholesale — presigned-R2-PUT upload, owner soft-delete + undo +
   // delayed R2 reclaim, admin removal, and reporting. The composed meme that a
   // template helps produce is a plain uploaded meme with no link back here
-  // (backend-blind creator, ADR 0019), so there is no foreign key from `memes`
+  // (backend-blind creator, ADR 0020), so there is no foreign key from `memes`
   // to `templates` and no usage tracking.
   templates: defineTable({
     // Required short human name, shown in the picker and searched on. Trimmed
@@ -167,7 +167,7 @@ export default defineSchema({
     reporterId: v.id("users"),
     // A report targets exactly one entity, discriminated by which foreign key
     // is present: `memeId` for a meme report, `templateId` for a template
-    // report (#84, ADR 0019). Both are optional rather than a discriminated
+    // report (#84, ADR 0020). Both are optional rather than a discriminated
     // union so the extension is migration-free — existing meme reports (which
     // carry `memeId` and no `templateId`) validate unchanged, and no
     // `targetType` field has to be backfilled. Callers set exactly one; the

@@ -1,5 +1,5 @@
 /**
- * Pure text-layout for the Meme Creator (#84, ADR 0019).
+ * Pure text-layout for the Meme Creator (#84, ADR 0020).
  *
  * This module is the single source of line breaking and geometry shared by the
  * live DOM overlay (what the user edits) and the canvas export (what gets

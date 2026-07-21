@@ -8,7 +8,7 @@ import {
 /**
  * Browser glue between the pure `meme-text-layout` module and the canvas/DOM
  * (#84). Nothing here is unit-tested (canvas + fonts are browser APIs, ADR
- * 0019's testing split); the *layout* it delegates to is tested exhaustively.
+ * 0020's testing split); the *layout* it delegates to is tested exhaustively.
  *
  * The bundled meme font is Anton (`@fontsource/anton`, self-hosted — no CDN).
  * The classic meme look is white fill + black outline, uppercase, and that is

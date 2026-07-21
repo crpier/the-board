@@ -124,7 +124,7 @@ export async function uploadFileToR2(
  * Publish a meme end to end: upload the file, then run the standard
  * `createMeme` validation + insert. Used by both the upload page and the
  * creator so the two share one pipeline (the creator's composed image is a
- * plain uploaded meme — backend-blind, ADR 0019).
+ * plain uploaded meme — backend-blind, ADR 0020).
  */
 export async function publishMeme(
   client: ConvexClient,

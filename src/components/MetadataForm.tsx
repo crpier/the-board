@@ -9,7 +9,7 @@ import {
  * The shared title/tags/visibility publish form (#84). Extracted from the
  * upload page so the Meme Creator publishes a composed image through the exact
  * same metadata surface — the creator's output is a plain uploaded meme
- * (backend-blind, ADR 0019), so its publish form must be identical.
+ * (backend-blind, ADR 0020), so its publish form must be identical.
  *
  * Owns only the metadata fields; the caller owns the file/preview above it and
  * the actual publish action (`onPublish`) below it, plus `busy`/`error` state.

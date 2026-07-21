@@ -125,6 +125,40 @@ The product should let guests browse public content immediately, let authenticat
 - Users can edit their profile display name from the settings page; other
   profile fields (email, avatar) stay managed by the auth provider.
 
+### Meme creator and templates
+
+- Signed-in users can make a meme in-app at `/create` (linked from the nav and
+  from the template picker); guests are sent to sign in, the same as uploading.
+- The base image is either a local static image or a Template picked from the
+  library. GIFs and videos are rejected in the creator with a clear message —
+  captioning them is out of scope, and a canvas would silently freeze the first
+  frame.
+- Captions are free-positioned text boxes: add several, drag each anywhere, and
+  resize a box to scale its font. Styling is fixed to the classic meme look
+  (bold white fill, black outline, one bundled font) with no other controls —
+  no colours, rotation, crop, stickers, or drawing. The editor preview matches
+  the exported image exactly.
+- "Copy image" copies the finished meme to the clipboard (as a PNG) without
+  publishing. Publishing re-encodes the image and goes through the exact same
+  title/tags/visibility form and pipeline as a normal upload — a created meme is
+  indistinguishable from an uploaded one (no provenance, no remix; see ADR
+  0020).
+- A Template is a reusable base image in a shared library, distinct from a meme:
+  it has no votes and no feed presence, and is always public. Any signed-in user
+  can contribute one by opting in — a "save this image as a template" checkbox
+  with a required name — while publishing a meme from their own local image.
+- The library launches empty (no seeded classics) and is browsed as a
+  newest-first grid with name search; there are no tags, categories, or
+  popularity ranking in v1 (a created meme is never linked back to its base, so
+  usage can't be ranked).
+- Templates reuse the meme lifecycle: an owner can delete their own Template
+  with the standard undo window, an admin can remove any Template (also with
+  undo), any signed-in user can report a Template, and its media is reclaimed on
+  the same delayed schedule as a meme's.
+- A meme publish and a Template save are independent outcomes: the creator
+  reports success or failure for each separately, so one failing doesn't
+  obscure the other.
+
 ## Visibility, lifecycle, and moderation
 
 - Visibility and lifecycle are separate concepts.
@@ -144,10 +178,12 @@ The product should let guests browse public content immediately, let authenticat
   review queue (ADR 0018) for reports and future findings that aren't tied to
   an admin's current scroll position.
 - The `/admin` review queue lists open reports, oldest first, each resolved
-  to the reporter's name and the reported meme's preview. An admin resolves a
-  report by hiding the meme (the same visibility change as the inline
-  toggle) or dismissing it with no meme change; resolving is final — there is
-  no reopen path.
+  to the reporter's name and the reported item's preview. A report targets a
+  meme or a Template; the queue moderates both in one place. An admin resolves
+  a report by hiding the reported item (hiding a meme is a visibility change,
+  the same as the inline toggle; hiding a Template removes it from the library
+  with the standard undo window) or dismissing it with no change; resolving is
+  final — there is no reopen path.
 - `/admin` is admin-only; every other viewer (guest or signed-in non-admin)
   gets the same not-found treatment as any other hidden route.
 
@@ -189,7 +225,8 @@ The product should let guests browse public content immediately, let authenticat
 - The first registered user becomes admin automatically.
 - Admins can moderate any meme through visibility changes, either inline on
   the meme or by resolving a report in the `/admin` queue, and review system
-  findings there too.
+  findings there too. Admins can also remove any Template from the library
+  (a soft delete with the standard undo window), inline or via a report.
 - Admins can promote any user to admin, and demote an admin back to a regular
   user, from the user role management surface (`/admin/users`).
 - The last remaining admin can't be demoted — enforced server-side, not just
@@ -198,8 +235,9 @@ The product should let guests browse public content immediately, let authenticat
 
 ## Rate limiting
 
-- Uploading, voting, and editing are rate-limited per user to prevent a single
-  account from hammering the backend (scripted spam, vote-brigading, etc.).
+- Uploading (including saving a Template, which is an upload), voting, and
+  editing are rate-limited per user to prevent a single account from hammering
+  the backend (scripted spam, vote-brigading, etc.).
 - Limits are generous enough that normal use never hits them: roughly 10
   uploads/hour, 60 votes/minute, and 30 edits/hour (see
   `docs/adr/0017-rate-limiting.md` for the exact configuration and rationale).

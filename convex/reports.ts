@@ -15,7 +15,7 @@ import { mediaTypeValidator, reportReasonValidator } from "./validators";
  * resolution (ADR 0006) — raw foreign keys never leave this query except as the
  * ids the resolve mutation needs back.
  *
- * A report targets a meme *or* a template (#84, ADR 0019), so the item is a
+ * A report targets a meme *or* a template (#84, ADR 0020), so the item is a
  * discriminated union on `targetType`. `memeAvailable`/`templateAvailable` are
  * false when the target is gone (bad id, already deleted) by review time; the
  * report still shows (dismiss is always possible) but the preview and hide
