@@ -116,10 +116,32 @@ function ReportRow(props: {
     }
   }
 
+  // Resolve the polymorphic target (#84) into a flat shape the row renders,
+  // so the JSX below doesn't branch on `targetType` everywhere.
+  const target = () => {
+    const r = props.report;
+    if (r.targetType === "template") {
+      return {
+        available: r.templateAvailable,
+        mediaUrl: r.templateMediaUrl,
+        mediaType: undefined as "video" | undefined,
+        label: r.templateName,
+        kind: "template" as const,
+      };
+    }
+    return {
+      available: r.memeAvailable,
+      mediaUrl: r.memeMediaUrl,
+      mediaType: r.memeMediaType === "video" ? ("video" as const) : undefined,
+      label: r.memeTitle,
+      kind: "meme" as const,
+    };
+  };
+
   return (
     <article class="flex flex-wrap items-start gap-3 rounded-2xl border border-white/10 p-3">
       <Show
-        when={props.report.memeAvailable && props.report.memeMediaUrl}
+        when={target().available && target().mediaUrl}
         fallback={
           <div class="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg bg-[#2a2a3e] text-[10px] text-[#5a5a6e]">
             gone
@@ -128,7 +150,7 @@ function ReportRow(props: {
       >
         {(mediaUrl) => (
           <Show
-            when={props.report.memeMediaType === "video"}
+            when={target().mediaType === "video"}
             fallback={
               <img
                 src={mediaUrl()}
@@ -150,10 +172,13 @@ function ReportRow(props: {
       <div class="min-w-0 flex-1 space-y-1">
         <p class="text-sm font-bold text-white">
           {REASON_LABELS[props.report.reason]}
-          <Show when={props.report.memeTitle}>
-            {(title) => (
+          <span class="ml-2 text-xs font-normal tracking-wide text-[#5a5a6e] uppercase">
+            {target().kind}
+          </span>
+          <Show when={target().label}>
+            {(label) => (
               <span class="ml-2 font-normal text-[#5a5a6e]">
-                on &ldquo;{title()}&rdquo;
+                on &ldquo;{label()}&rdquo;
               </span>
             )}
           </Show>
@@ -166,9 +191,10 @@ function ReportRow(props: {
         <p class="text-xs text-[#5a5a6e]">
           Reported by @{props.report.reporterName}
         </p>
-        <Show when={!props.report.memeAvailable}>
+        <Show when={!target().available}>
           <p class="text-xs text-[#ffd43b]">
-            Meme already unavailable — you can still dismiss this report.
+            {target().kind === "template" ? "Template" : "Meme"} already
+            unavailable — you can still dismiss this report.
           </p>
         </Show>
         <Show when={error()}>
@@ -179,16 +205,16 @@ function ReportRow(props: {
       <div class="flex shrink-0 gap-2">
         <button
           type="button"
-          disabled={resolveReport.isLoading() || !props.report.memeAvailable}
+          disabled={resolveReport.isLoading() || !target().available}
           onClick={() => void resolve("hide")}
           title={
-            props.report.memeAvailable
-              ? "Hide the reported meme"
-              : "Meme is already unavailable"
+            target().available
+              ? `Hide the reported ${target().kind}`
+              : `${target().kind} is already unavailable`
           }
           class="rounded-lg border border-[#ff8787]/30 bg-[#ff8787]/10 px-3 py-1.5 text-xs font-bold text-[#ff8787] transition disabled:cursor-not-allowed disabled:opacity-50"
         >
-          Hide meme
+          {target().kind === "template" ? "Remove template" : "Hide meme"}
         </button>
         <button
           type="button"
