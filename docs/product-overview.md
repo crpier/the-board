@@ -119,9 +119,12 @@ The product should let guests browse public content immediately, let authenticat
   the confirmation toast shown right after deleting.
 - Media storage cleanup is eventually consistent: a background sweep runs
   every few hours and removes any stored media object that no longer belongs
-  to a live meme (including one reclaimed past its undo window), catching
-  cases where the normal reclaim step failed to finish. This is invisible to
-  users and does not change when a deleted meme's undo window closes.
+  to a live meme or a live template (including one reclaimed past its undo
+  window), catching cases where the normal reclaim step failed to finish.
+  Memes and templates share one media store, so the sweep keeps any object
+  still claimed by a live meme or template and only reclaims true orphans.
+  This is invisible to users and does not change when a deleted item's undo
+  window closes.
 - Users can edit their profile display name from the settings page; other
   profile fields (email, avatar) stay managed by the auth provider.
 
